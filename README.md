@@ -1,5 +1,5 @@
 # oqlang
-oqlang is a work in prograss shitty scripting language that might eventually be embeddable, made in Odin. 
+oqlang is a work in progress shitty scripting language that might eventually be embeddable, made in Odin. 
 
 this language is based on the clox section of the book Crafting Interpreters by Robert Nystrom. 
 
