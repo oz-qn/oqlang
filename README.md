@@ -19,7 +19,7 @@ this already locks me out of most scripting languages so I decided to make my ow
   - take the ocu part of ocular and slap a lang behind it.
 - Why will classes be called structs?
 
-  - to make it clear to users that this languages version of collection of data and procedures(functions) do not work the same way as other object oriented languages. most naming and syntax choices are for clarity for people who may not be familiar with more advanced topics.
+  - to make it clear to users that this languages version of collections of data and procedures(functions) do not work the same way as object oriented languages. most naming and syntax choices are for clarity for people who may not be familiar with more advanced topics.
 - When will this be out or even at all usable? You can't even read a text file yet.
 
   - idk i'll get there eventually.
