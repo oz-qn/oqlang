@@ -1,6 +1,7 @@
 package OQ
 
 import "core:fmt"
+import "core:os"
 
 DEBUG :: false
 
@@ -48,8 +49,8 @@ run :: proc() -> InterpretResult {
 			disassemble_instruction(vm.chunk, vm.ip + 1)
 		}
 
-		instruction: u8 = read_byte()
-		#partial switch Op(instruction) {
+		instruction: Op = Op(read_byte())
+		#partial switch instruction {
 		case .RETURN:
 			print_value(pop())
 			fmt.print("\n")
@@ -84,11 +85,42 @@ run :: proc() -> InterpretResult {
 	}
 }
 
+load_file :: proc(filepath: string) -> string {
+	full_path, path_err := os.get_absolute_path(filepath, context.temp_allocator)
+	if path_err != nil {
+		fmt.printfln("Error: {}. Couldn't get absolute path.", path_err)
+		os.exit(0)
+	}
+
+	data, err := os.read_entire_file(filepath, context.temp_allocator)
+	if err != nil {
+		fmt.printfln("Error: {}. Data: {}. Error loading file. Exiting...", err, data)
+		os.exit(0)
+	}
+
+	return string(data)
+}
+
 run_vm :: proc() {
 	chunk: Chunk
+
 	init_vm()
+
+	file_text: string
+
+	args := os.args
+	if len(args) == 2 {
+		path := args[1]
+		file_text = load_file(path)
+	} else {
+		fmt.printfln("Usage: oqlang [filepath].")
+		os.exit(0)
+	}
+
+	fmt.printfln("{}", file_text)
+
 	write_constant(&chunk, 5.3, 0)
-	write_constant(&chunk, 2.0, 0)
+	write_constant(&chunk, 1.3, 0)
 	write_chunk(&chunk, u8(Op.MUL), 0)
 	write_chunk(&chunk, u8(Op.RETURN), 0)
 	fmt.println("Interpreting following opcode chunk.")

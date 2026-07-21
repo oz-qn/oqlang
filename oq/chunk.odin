@@ -4,10 +4,10 @@ import "core:fmt"
 
 LineData :: struct {
 	pc:         u32,
-	line_delta: u16,
+	line_delta: u32,
 }
 
-current_line: u16 = 0
+current_line: u32 = 0
 current_pc: u32 = 0
 
 Chunk :: struct {
@@ -26,7 +26,7 @@ clear_value_array :: proc(array: ^[dynamic]Value) {
 	shrink_dynamic_array(array)
 }
 
-write_constant :: proc(chunk: ^Chunk, value: Value, line: u16) {
+write_constant :: proc(chunk: ^Chunk, value: Value, line: u32) {
 	index := add_constant(chunk, value)
 	if (index < 256) {
 		write_chunk(chunk, u8(Op.CONSTANT), line)
@@ -39,7 +39,7 @@ write_constant :: proc(chunk: ^Chunk, value: Value, line: u16) {
 	}
 }
 
-write_chunk :: proc(chunk: ^Chunk, data: u8, line: u16) {
+write_chunk :: proc(chunk: ^Chunk, data: u8, line: u32) {
 	append_elem(&chunk.code, data)
 	if line != current_line {
 		append_elem(&chunk.line_data, LineData{current_pc, line - current_line})
@@ -48,8 +48,8 @@ write_chunk :: proc(chunk: ^Chunk, data: u8, line: u16) {
 	current_pc += 1
 }
 
-get_line :: proc(chunk: ^Chunk, op: u32) -> u16 {
-	final: u16
+get_line :: proc(chunk: ^Chunk, op: u32) -> u32 {
+	final: u32
 	for value, index in chunk.line_data {
 		final += value.line_delta
 		if value.pc >= op {

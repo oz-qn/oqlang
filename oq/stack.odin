@@ -2,7 +2,6 @@ package OQ
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:fmt"
 import "core:mem"
 
 STACK_MAX :: 256
@@ -20,7 +19,6 @@ push_bits :: #force_inline proc(stack: ^[2048]u8, value: any) {
 pop_bits :: proc(stack: ^[2048]u8, $T: typeid) -> T {
 	size := size_of(T)
 	start := 0
-	fmt.printfln("start: {}, size: {}", start, size)
 	value: T
 	intrinsics.mem_copy(&value, raw_data(stack[start:start + size]), size)
 	return value

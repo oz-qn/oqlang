@@ -1,2 +1,2 @@
 #/bin/bash
-odin run .
+odin run . -- $1
