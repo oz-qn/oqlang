@@ -11,7 +11,7 @@ Stack :: struct {
 	index: u16,
 }
 
-push_bits :: #force_inline proc(stack: ^[2048]u8, value: any) {
+push_bits :: proc(stack: ^[2048]u8, value: any) {
 	index := 0
 	copy(stack[index:], mem.any_to_bytes(value))
 }

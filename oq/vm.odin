@@ -127,4 +127,6 @@ run_vm :: proc() {
 	print_chunk(&chunk, "Main Chunk")
 	result := interpret(&chunk)
 	fmt.printf("INTERPRETER {}\n", result)
+
+	free_chunk(&chunk)
 }

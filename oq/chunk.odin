@@ -48,6 +48,12 @@ write_chunk :: proc(chunk: ^Chunk, data: u8, line: u32) {
 	current_pc += 1
 }
 
+free_chunk :: proc(chunk: ^Chunk) {
+	delete(chunk.line_data)
+	delete(chunk.constants)
+	delete(chunk.code)
+}
+
 get_line :: proc(chunk: ^Chunk, op: u32) -> u32 {
 	final: u32
 	for value, index in chunk.line_data {
