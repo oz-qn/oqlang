@@ -1,5 +1,6 @@
 package OQ
 
+import "core:bufio"
 import "core:fmt"
 import "core:os"
 
@@ -7,17 +8,11 @@ DEBUG :: false
 
 VM :: struct {
 	chunk: ^Chunk,
-	ip:    int,
 	stack: Stack,
+	ip:    int,
 }
 
 vm: VM
-
-InterpretResult :: enum {
-	OK,
-	COMPILE_ERROR,
-	RUNTIME_ERROR,
-}
 
 init_vm :: proc() {
 	vm.stack.index = 1
@@ -25,12 +20,6 @@ init_vm :: proc() {
 
 free_vm :: proc() {
 
-}
-
-interpret :: proc(chunk: ^Chunk) -> InterpretResult {
-	vm.chunk = chunk
-	vm.ip = -1
-	return run()
 }
 
 read_byte :: #force_inline proc() -> u8 {
@@ -85,6 +74,29 @@ run :: proc() -> InterpretResult {
 	}
 }
 
+repl :: proc() {
+	scanner: bufio.Scanner
+	stdin := os.to_stream(os.stdin)
+	bufio.scanner_init(&scanner, stdin, context.temp_allocator)
+
+	for {
+		fmt.printf("> ")
+		if !bufio.scanner_scan(&scanner) {
+			break
+		}
+		line := bufio.scanner_text(&scanner)
+		if line == "q" do break
+
+		interpret(line)
+	}
+
+	if err := bufio.scanner_error(&scanner); err != nil {
+		fmt.eprintln("error scanning input: %v", err)
+	}
+
+	free_all(context.temp_allocator)
+}
+
 load_file :: proc(filepath: string) -> string {
 	full_path, path_err := os.get_absolute_path(filepath, context.temp_allocator)
 	if path_err != nil {
@@ -109,12 +121,15 @@ run_vm :: proc() {
 	file_text: string
 
 	args := os.args
-	if len(args) == 2 {
+
+	if len(args) == 1 {
+		repl()
+	} else if len(args) == 2 {
 		path := args[1]
 		file_text = load_file(path)
 	} else {
 		fmt.printfln("Usage: oqlang [filepath].")
-		os.exit(0)
+		return
 	}
 
 	fmt.printfln("{}", file_text)
@@ -125,8 +140,7 @@ run_vm :: proc() {
 	write_chunk(&chunk, u8(Op.RETURN), 0)
 	fmt.println("Interpreting following opcode chunk.")
 	print_chunk(&chunk, "Main Chunk")
-	result := interpret(&chunk)
-	fmt.printf("INTERPRETER {}\n", result)
+	fmt.printf("INTERPRETER {}\n")
 
 	free_chunk(&chunk)
 }
