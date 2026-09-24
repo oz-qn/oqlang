@@ -10,6 +10,8 @@ TokenType :: enum u8 {
 	MINUS,
 	PLUS,
 	SEMICOLON,
+	COLON,
+	COLONCOLON,
 	SLASH,
 	STAR,
 	BANG,
@@ -130,4 +132,8 @@ identifier_type :: #force_inline proc() -> TokenType {
 token_identifier :: proc() -> Token {
 	for is_alpha(peek()) || is_digit(peek()) do advance()
 	return token_make(identifier_type())
+}
+
+token_get_text :: proc(token: Token) -> string {
+	return scanner.code[token.start:token.start + token.length]
 }

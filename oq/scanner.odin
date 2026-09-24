@@ -21,7 +21,9 @@ scan_token :: proc() -> Token {
 	skip_whitespace()
 	scanner.start = scanner.current
 
-	if is_at_end() do return token_make(.EOF)
+	if is_at_end() {
+		return token_make(.EOF)
+	}
 
 	c: rune = advance()
 	if is_alpha(c) do return token_identifier()
@@ -58,16 +60,17 @@ scan_token :: proc() -> Token {
 		return token_make(.LESS_EQUAL if match('=') else .LESS)
 	case '>':
 		return token_make(.GREATER_EQUAL if match('=') else .GREATER)
+	case ':':
+		return token_make(.COLONCOLON if match(':') else .COLON)
 	case '"':
 		return token_string()
-
 	}
 
 	return token_error("Unexpected character.")
 }
 
 skip_whitespace :: proc() {
-	for {
+	for !is_at_end() {
 		c := peek()
 		switch c {
 		case ' ', '\r', '\t':
@@ -79,10 +82,14 @@ skip_whitespace :: proc() {
 			break
 		case '/':
 			if peek_next() == '/' {
-				for peek() != '\n' && !is_at_end() {
+				for (peek() != '\n') && !is_at_end() {
 					advance()
 				}
+			} else {
+				return
 			}
+		case utf8.RUNE_EOF:
+			return
 		case:
 			return
 		}
@@ -119,14 +126,5 @@ advance :: proc() -> rune {
 }
 
 is_at_end :: proc() -> bool {
-	return scanner.current >= len(scanner.code)
-}
-
-check_keyword :: proc(start, length: int, rest: string, type: TokenType) -> TokenType {
-	fmt.println(scanner.start + start)
-	if (scanner.current - scanner.start) == (start + length) &&
-	   ((scanner.start + start) == len(rest)) {
-		return type
-	}
-	return .IDENTIFIER
+	return scanner.current >= (len(scanner.code) - 1)
 }

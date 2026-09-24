@@ -127,12 +127,11 @@ run_vm :: proc() {
 	} else if len(args) == 2 {
 		path := args[1]
 		file_text = load_file(path)
+		compile(file_text, &chunk)
 	} else {
 		fmt.printfln("Usage: oqlang [filepath].")
 		return
 	}
-
-	fmt.printfln("{}", file_text)
 
 	write_constant(&chunk, 5.3, 0)
 	write_constant(&chunk, 1.3, 0)
@@ -140,7 +139,7 @@ run_vm :: proc() {
 	write_chunk(&chunk, u8(Op.RETURN), 0)
 	fmt.println("Interpreting following opcode chunk.")
 	print_chunk(&chunk, "Main Chunk")
-	fmt.printf("INTERPRETER {}\n")
+	// fmt.printf("INTERPRETER {}\n")
 
 	free_chunk(&chunk)
 }
