@@ -55,6 +55,7 @@ Token :: struct {
 
 token_make :: #force_inline proc(type: TokenType) -> Token {
 	return Token {
+		text = scanner.code[scanner.start:scanner.start + (scanner.current - scanner.start)],
 		type = type,
 		start = scanner.start,
 		length = scanner.current - scanner.start,
@@ -67,7 +68,9 @@ token_error :: proc(message: string) -> Token {
 }
 
 token_number :: proc() -> Token {
-	for is_digit(peek()) do advance()
+	for is_digit(peek()) {
+		advance()
+	}
 
 	if peek() == '.' && is_digit(peek_next()) {
 		advance()

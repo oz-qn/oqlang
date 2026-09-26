@@ -1,6 +1,5 @@
 package OQ
 
-import "core:fmt"
 import "core:unicode/utf8"
 
 Scanner :: struct {
@@ -105,6 +104,7 @@ is_digit :: proc(c: rune) -> bool {
 }
 
 peek :: #force_inline proc() -> rune {
+	if is_at_end() do return utf8.RUNE_EOF
 	return rune(scanner.code[scanner.current])
 }
 
@@ -125,6 +125,6 @@ advance :: proc() -> rune {
 	return rune(scanner.code[scanner.current - 1])
 }
 
-is_at_end :: proc() -> bool {
-	return scanner.current >= (len(scanner.code) - 1)
+is_at_end :: #force_inline proc() -> bool {
+	return scanner.current >= len(scanner.code)
 }

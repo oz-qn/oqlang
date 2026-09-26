@@ -47,8 +47,13 @@ parser_advance :: proc() {
 
 compile :: proc(code: string, chunk: ^Chunk) -> bool {
 	scanner_init(code)
-	parser_advance()
-	consume(.EOF, "Expect end of expression.")
+	for {
+		token := scan_token()
+		fmt.println(token)
+		if token.type == .EOF do break
+	}
+	// parser_advance()
+	// consume(.EOF, "Expect end of expression.")
 	return !parser.had_error
 }
 

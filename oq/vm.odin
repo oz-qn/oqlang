@@ -85,6 +85,7 @@ repl :: proc() {
 			break
 		}
 		line := bufio.scanner_text(&scanner)
+		fmt.println("Interpreting repl expression: ", line)
 		if line == "q" do break
 
 		interpret(line)
