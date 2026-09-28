@@ -1,5 +1,6 @@
 package OQ
 
+import "core:fmt"
 InterpretResult :: enum {
 	OK,
 	COMPILE_ERROR,

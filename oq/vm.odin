@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:os"
 
 DEBUG :: false
+DEBUG_PRINT_CODE :: false
 
 VM :: struct {
 	chunk: ^Chunk,
@@ -23,19 +24,19 @@ free_vm :: proc() {
 }
 
 read_byte :: #force_inline proc() -> u8 {
+	result := vm.chunk.code[vm.ip]
 	vm.ip += 1
-	return vm.chunk.code[vm.ip]
+	return result
 }
 
 run :: proc() -> InterpretResult {
-
 	for {
 		when DEBUG {
 			//for i: u16 = 0; i < vm.stack.index; i += 1 {
 			//	print_value(vm.stack.data[i])
 			//	fmt.print("\n")
 			//}
-			disassemble_instruction(vm.chunk, vm.ip + 1)
+			// disassemble_instruction(vm.chunk, vm.ip + 1)
 		}
 
 		instruction: Op = Op(read_byte())
@@ -53,22 +54,22 @@ run :: proc() -> InterpretResult {
 		case .ADD:
 			a := pop()
 			b := pop()
-			push(a + b)
+			push(b + a)
 			break
 		case .SUB:
 			a := pop()
 			b := pop()
-			push(a - b)
+			push(b - a)
 			break
 		case .MUL:
 			a := pop()
 			b := pop()
-			push(a * b)
+			push(b * a)
 			break
 		case .DIV:
 			a := pop()
 			b := pop()
-			push(a / b)
+			push(b / a)
 			break
 		}
 	}
@@ -85,7 +86,6 @@ repl :: proc() {
 			break
 		}
 		line := bufio.scanner_text(&scanner)
-		fmt.println("Interpreting repl expression: ", line)
 		if line == "q" do break
 
 		interpret(line)
@@ -115,8 +115,6 @@ load_file :: proc(filepath: string) -> string {
 }
 
 run_vm :: proc() {
-	chunk: Chunk
-
 	init_vm()
 
 	file_text: string
@@ -128,19 +126,9 @@ run_vm :: proc() {
 	} else if len(args) == 2 {
 		path := args[1]
 		file_text = load_file(path)
-		compile(file_text, &chunk)
+		result := interpret(file_text)
 	} else {
 		fmt.printfln("Usage: oqlang [filepath].")
 		return
 	}
-
-	write_constant(&chunk, 5.3, 0)
-	write_constant(&chunk, 1.3, 0)
-	write_chunk(&chunk, u8(Op.MUL), 0)
-	write_chunk(&chunk, u8(Op.RETURN), 0)
-	fmt.println("Interpreting following opcode chunk.")
-	print_chunk(&chunk, "Main Chunk")
-	// fmt.printf("INTERPRETER {}\n")
-
-	free_chunk(&chunk)
 }

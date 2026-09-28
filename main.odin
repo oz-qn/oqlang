@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "oq"
 
-DEBUG :: true
+DEBUG :: false
 
 main :: proc() {
 	when DEBUG {
