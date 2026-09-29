@@ -14,6 +14,7 @@ TokenType :: enum u8 {
 	COLONCOLON,
 	SLASH,
 	STAR,
+	PERCENT,
 	BANG,
 	BANG_EQUAL,
 	EQUAL,

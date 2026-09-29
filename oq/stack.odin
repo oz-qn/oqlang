@@ -24,16 +24,20 @@ pop_bits :: proc(stack: ^[2048]u8, $T: typeid) -> T {
 	return value
 }
 
-push :: #force_inline proc(value: Value) {
+push :: #force_inline proc "contextless" (value: Value) {
 	vm.stack.data[vm.stack.index] = value
 	vm.stack.index += 1
 }
 
-pop :: #force_inline proc() -> Value {
+pop :: #force_inline proc "contextless" () -> Value {
 	vm.stack.index -= 1
 	return vm.stack.data[vm.stack.index]
 }
 
-reset_stack :: #force_inline proc(stack: ^Stack) {
-	stack.index = 1
+peep_stack :: #force_inline proc "contextless" (distance: int) -> Value {
+	return vm.stack.data[vm.stack.index - 1]
+}
+
+reset_stack :: #force_inline proc "contextless" () {
+	vm.stack.index = 1
 }

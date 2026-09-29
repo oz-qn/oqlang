@@ -101,12 +101,30 @@ disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 		return simple_instruction("OP_DIV", index)
 	case Op.MUL:
 		return simple_instruction("OP_MUL", index)
-	case:
-		fmt.printf("unknown opcode {}\n", Op(instruction))
-		return index + 1
+	case Op.NIL:
+		return simple_instruction("OP_NIL", index)
+	case Op.TRUE:
+		return simple_instruction("OP_TRUE", index)
+	case Op.FALSE:
+		return simple_instruction("OP_FALSE", index)
+	case Op.NOT:
+		return simple_instruction("OP_NOT", index)
+	case Op.NOT_EQUAL:
+		return simple_instruction("OP_NOT_EQUAL", index)
+	case Op.EQUAL:
+		return simple_instruction("OP_EQUAL", index)
+	case Op.LESS:
+		return simple_instruction("OP_LESS", index)
+	case Op.LESS_EQUAL:
+		return simple_instruction("OP_LESS_EQUAL", index)
+	case Op.GREATER:
+		return simple_instruction("OP_GREATER", index)
+	case Op.GREATER_EQUAL:
+		return simple_instruction("OP_GREATER_EQUAL", index)
 	}
 
-	return index
+	fmt.printf("unknown opcode {}\n", Op(instruction))
+	return index + 1
 }
 
 print_value :: proc(value: Value) {
@@ -116,7 +134,7 @@ print_value :: proc(value: Value) {
 
 simple_instruction :: #force_inline proc(name: string, index: int) -> int {
 	fmt.printf("{}\n", name)
-	return index + 1
+	return index
 }
 
 constant_instruction :: #force_inline proc(name: string, chunk: ^Chunk, index: int) -> int {

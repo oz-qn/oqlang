@@ -2,6 +2,7 @@ package OQ
 
 import "core:bufio"
 import "core:fmt"
+import "core:math"
 import "core:os"
 
 DEBUG :: false
@@ -31,14 +32,6 @@ read_byte :: #force_inline proc() -> u8 {
 
 run :: proc() -> InterpretResult {
 	for {
-		when DEBUG {
-			//for i: u16 = 0; i < vm.stack.index; i += 1 {
-			//	print_value(vm.stack.data[i])
-			//	fmt.print("\n")
-			//}
-			// disassemble_instruction(vm.chunk, vm.ip + 1)
-		}
-
 		instruction: Op = Op(read_byte())
 		#partial switch instruction {
 		case .RETURN:
@@ -50,29 +43,66 @@ run :: proc() -> InterpretResult {
 			push(constant)
 			break
 		case .NEGATE:
-			push(-pop())
-		case .ADD:
-			a := pop()
-			b := pop()
-			push(b + a)
-			break
-		case .SUB:
-			a := pop()
-			b := pop()
-			push(b - a)
-			break
-		case .MUL:
-			a := pop()
-			b := pop()
-			push(b * a)
-			break
-		case .DIV:
-			a := pop()
-			b := pop()
-			push(b / a)
-			break
+			if !is_number(peep_stack(0)) {
+				runtime_error("Operand must be a number.")
+				return .RUNTIME_ERROR
+			}
+			push(-as_number(pop()))
+		case .ADD, .SUB, .MUL, .DIV, .MOD, .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
+			if !binary_op(instruction) {
+				return .RUNTIME_ERROR
+			}
+		case .EQUAL:
+			push(pop() == pop())
+		case .NOT_EQUAL:
+			push(pop() != pop())
+		case .NOT:
+			push(is_falsey(pop()))
+		case .NIL:
+			push(nil)
+		case .TRUE:
+			push(true)
+		case .FALSE:
+			push(false)
 		}
 	}
+}
+
+binary_op :: #force_inline proc(instruction: Op) -> bool {
+	if !is_number(peep_stack(0)) || !is_number(peep_stack(1)) {
+		runtime_error("Operands must be a number,")
+		return false
+	}
+	a := as_number(pop())
+	b := as_number(pop())
+	#partial switch instruction {
+	case .ADD:
+		push(b + a)
+	case .SUB:
+		push(b - a)
+	case .DIV:
+		push(b / a)
+	case .MUL:
+		push(b * a)
+	case .MOD:
+		push(math.mod(b, a))
+	case .GREATER:
+		push(b > a)
+	case .LESS:
+		push(b < a)
+	case .LESS_EQUAL:
+		push(b <= a)
+	case .GREATER_EQUAL:
+		push(b >= a)
+	}
+	return true
+}
+
+runtime_error :: proc(format: string, args: ..any) {
+	fmt.eprintfln(format, ..args)
+	line := get_line(vm.chunk, u32(vm.ip))
+	fmt.eprintfln("[line {}] in script", line)
+	reset_stack()
 }
 
 repl :: proc() {
@@ -86,6 +116,7 @@ repl :: proc() {
 			break
 		}
 		line := bufio.scanner_text(&scanner)
+		if line == "" do continue
 		if line == "q" do break
 
 		interpret(line)

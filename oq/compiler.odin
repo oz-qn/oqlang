@@ -41,34 +41,35 @@ rules := [TokenType]ParseRule {
 	.DOT           = {nil, nil, .NONE},
 	.MINUS         = {unary, binary, .TERM},
 	.PLUS          = {nil, binary, .TERM},
+	.PERCENT       = {nil, binary, .TERM},
 	.SEMICOLON     = {nil, nil, .NONE},
 	.SLASH         = {nil, binary, .FACTOR},
 	.STAR          = {nil, binary, .FACTOR},
-	.BANG          = {nil, nil, .NONE},
-	.BANG_EQUAL    = {nil, nil, .NONE},
+	.BANG          = {unary, nil, .NONE},
+	.BANG_EQUAL    = {nil, binary, .EQUALITY},
 	.EQUAL         = {nil, nil, .NONE},
-	.EQUAL_EQUAL   = {nil, nil, .NONE},
-	.GREATER       = {nil, nil, .NONE},
-	.GREATER_EQUAL = {nil, nil, .NONE},
-	.LESS          = {nil, nil, .NONE},
-	.LESS_EQUAL    = {nil, nil, .NONE},
+	.EQUAL_EQUAL   = {nil, binary, .EQUALITY},
+	.GREATER       = {nil, binary, .COMPARISON},
+	.GREATER_EQUAL = {nil, binary, .COMPARISON},
+	.LESS          = {nil, binary, .COMPARISON},
+	.LESS_EQUAL    = {nil, binary, .COMPARISON},
 	.IDENTIFIER    = {nil, nil, .NONE},
 	.STRING        = {nil, nil, .NONE},
 	.NUMBER        = {number, nil, .NONE},
 	.AND           = {nil, nil, .NONE},
 	.STRUCT        = {nil, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
-	.FALSE         = {nil, nil, .NONE},
+	.FALSE         = {literal, nil, .NONE},
 	.FOR           = {nil, nil, .NONE},
 	.PROC          = {nil, nil, .NONE},
 	.IF            = {nil, nil, .NONE},
-	.NIL           = {nil, nil, .NONE},
+	.NIL           = {literal, nil, .NONE},
 	.OR            = {nil, nil, .NONE},
 	.PRINT         = {nil, nil, .NONE},
 	.RETURN        = {nil, nil, .NONE},
 	.SUPER         = {nil, nil, .NONE},
 	.THIS          = {nil, nil, .NONE},
-	.TRUE          = {nil, nil, .NONE},
+	.TRUE          = {literal, nil, .NONE},
 	.VAR           = {nil, nil, .NONE},
 	.WHILE         = {nil, nil, .NONE},
 	.COLON         = {nil, nil, .NONE},
@@ -108,12 +109,25 @@ number :: proc() {
 	emit_constant(value)
 }
 
+literal :: proc() {
+	#partial switch parser.previous.type {
+	case .FALSE:
+		emit_byte(.FALSE)
+	case .TRUE:
+		emit_byte(.TRUE)
+	case .NIL:
+		emit_byte(.NIL)
+	}
+}
+
 unary :: proc() {
 	operator_type := parser.previous.type
 
 	parse_precedence(.UNARY)
 
 	#partial switch operator_type {
+	case .BANG:
+		emit_byte(.NOT)
 	case .MINUS:
 		emit_byte(.NEGATE)
 	case:
@@ -136,6 +150,20 @@ binary :: proc() {
 		emit_byte(.MUL)
 	case .SLASH:
 		emit_byte(.DIV)
+	case .PERCENT:
+		emit_byte(.MOD)
+	case .BANG_EQUAL:
+		emit_byte(.NOT_EQUAL)
+	case .EQUAL_EQUAL:
+		emit_byte(.EQUAL)
+	case .GREATER:
+		emit_byte(.GREATER)
+	case .GREATER_EQUAL:
+		emit_byte(.GREATER_EQUAL)
+	case .LESS:
+		emit_byte(.LESS)
+	case .LESS_EQUAL:
+		emit_byte(.LESS_EQUAL)
 	case:
 		return
 	}

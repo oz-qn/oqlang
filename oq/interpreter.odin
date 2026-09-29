@@ -1,6 +1,5 @@
 package OQ
 
-import "core:fmt"
 InterpretResult :: enum {
 	OK,
 	COMPILE_ERROR,
@@ -9,6 +8,7 @@ InterpretResult :: enum {
 
 interpret :: proc(code: string) -> InterpretResult {
 	chunk: Chunk
+	chunk.code = {}
 
 	if !compile(code, &chunk) {
 		free_chunk(&chunk)
