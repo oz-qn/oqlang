@@ -16,6 +16,13 @@ Chunk :: struct {
 	line_data: [dynamic]LineData,
 }
 
+chunk_init :: proc(c: ^Chunk) {
+	reserve(&c.code, 8)
+	reserve(&c.constants, 8)
+	reserve(&c.line_data, 8)
+
+}
+
 clear_chunk :: proc(chunk: ^Chunk) {
 	clear(&chunk.code)
 	shrink_dynamic_array(&chunk.code)
@@ -40,9 +47,9 @@ write_constant :: proc(chunk: ^Chunk, value: Value, line: u32) {
 }
 
 write_chunk :: proc(chunk: ^Chunk, data: u8, line: u32) {
-	append_elem(&chunk.code, data)
+	append(&chunk.code, data)
 	if line != current_line {
-		append_elem(&chunk.line_data, LineData{current_pc, line - current_line})
+		append(&chunk.line_data, LineData{current_pc, line - current_line})
 		current_line = line
 	}
 	current_pc += 1
@@ -78,7 +85,7 @@ add_constant :: proc(chunk: ^Chunk, value: Value) -> int {
 	return len(&chunk.constants) - 1
 }
 
-read_constant :: #force_inline proc(instruction: u8) -> Value {
+read_constant :: #force_inline proc "contextless" (instruction: u8) -> Value {
 	return vm.chunk.constants[instruction]
 }
 

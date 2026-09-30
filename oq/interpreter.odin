@@ -8,7 +8,7 @@ InterpretResult :: enum {
 
 interpret :: proc(code: string) -> InterpretResult {
 	chunk: Chunk
-	chunk.code = {}
+	chunk_init(&chunk)
 
 	if !compile(code, &chunk) {
 		free_chunk(&chunk)

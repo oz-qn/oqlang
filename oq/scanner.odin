@@ -63,6 +63,8 @@ scan_token :: proc() -> Token {
 		return token_make(.COLONCOLON if match(':') else .COLON)
 	case '%':
 		return token_make(.PERCENT)
+	case '^':
+		return token_make(.CARET)
 	case '"':
 		return token_string()
 	}

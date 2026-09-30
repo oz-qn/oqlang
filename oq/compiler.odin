@@ -45,6 +45,7 @@ rules := [TokenType]ParseRule {
 	.SEMICOLON     = {nil, nil, .NONE},
 	.SLASH         = {nil, binary, .FACTOR},
 	.STAR          = {nil, binary, .FACTOR},
+	.CARET         = {nil, binary, .FACTOR},
 	.BANG          = {unary, nil, .NONE},
 	.BANG_EQUAL    = {nil, binary, .EQUALITY},
 	.EQUAL         = {nil, nil, .NONE},
@@ -152,6 +153,8 @@ binary :: proc() {
 		emit_byte(.DIV)
 	case .PERCENT:
 		emit_byte(.MOD)
+	case .CARET:
+		emit_byte(.POW)
 	case .BANG_EQUAL:
 		emit_byte(.NOT_EQUAL)
 	case .EQUAL_EQUAL:

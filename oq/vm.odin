@@ -24,7 +24,7 @@ free_vm :: proc() {
 
 }
 
-read_byte :: #force_inline proc() -> u8 {
+read_byte :: #force_inline proc "contextless" () -> u8 {
 	result := vm.chunk.code[vm.ip]
 	vm.ip += 1
 	return result
@@ -48,8 +48,9 @@ run :: proc() -> InterpretResult {
 				return .RUNTIME_ERROR
 			}
 			push(-as_number(pop()))
-		case .ADD, .SUB, .MUL, .DIV, .MOD, .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
+		case .ADD, .SUB, .MUL, .DIV, .MOD, .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL, .POW:
 			if !binary_op(instruction) {
+				runtime_error("Operands must be a number,")
 				return .RUNTIME_ERROR
 			}
 		case .EQUAL:
@@ -68,9 +69,8 @@ run :: proc() -> InterpretResult {
 	}
 }
 
-binary_op :: #force_inline proc(instruction: Op) -> bool {
+binary_op :: #force_inline proc "contextless" (instruction: Op) -> bool {
 	if !is_number(peep_stack(0)) || !is_number(peep_stack(1)) {
-		runtime_error("Operands must be a number,")
 		return false
 	}
 	a := as_number(pop())
@@ -86,6 +86,8 @@ binary_op :: #force_inline proc(instruction: Op) -> bool {
 		push(b * a)
 	case .MOD:
 		push(math.mod(b, a))
+	case .POW:
+		push(math.pow(b, a))
 	case .GREATER:
 		push(b > a)
 	case .LESS:

@@ -7,6 +7,7 @@ Op :: distinct enum u8 {
 	MUL,
 	NEGATE,
 	MOD,
+	POW,
 	NOT,
 	EQUAL,
 	GREATER,

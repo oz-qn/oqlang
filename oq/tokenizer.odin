@@ -15,6 +15,7 @@ TokenType :: enum u8 {
 	SLASH,
 	STAR,
 	PERCENT,
+	CARET,
 	BANG,
 	BANG_EQUAL,
 	EQUAL,
