@@ -33,6 +33,15 @@ clear_value_array :: proc(array: ^[dynamic]Value) {
 	shrink_dynamic_array(array)
 }
 
+make_constant :: proc(value: Value) -> u8 {
+	index := add_constant(current_chunk(), value)
+	if index > 255 {
+		error("Too many constants in one chunk.")
+		return 0
+	}
+	return u8(index)
+}
+
 write_constant :: proc(chunk: ^Chunk, value: Value, line: u32) {
 	index := add_constant(chunk, value)
 	if (index < 256) {
@@ -85,8 +94,8 @@ add_constant :: proc(chunk: ^Chunk, value: Value) -> int {
 	return len(&chunk.constants) - 1
 }
 
-read_constant :: #force_inline proc "contextless" (instruction: u8) -> Value {
-	return vm.chunk.constants[instruction]
+read_constant :: #force_inline proc "contextless" () -> Value {
+	return vm.chunk.constants[read_byte()]
 }
 
 disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
@@ -128,6 +137,12 @@ disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 		return simple_instruction("OP_GREATER", index)
 	case Op.GREATER_EQUAL:
 		return simple_instruction("OP_GREATER_EQUAL", index)
+	case Op.PRINT:
+		return simple_instruction("OP_PRINT", index)
+	case Op.POP:
+		return simple_instruction("OP_POP", index)
+	case Op.DEFINE_GLOBAL:
+		return constant_instruction("OP_DEFINE_GLOBAL", chunk, index)
 	}
 
 	fmt.printf("unknown opcode {}\n", Op(instruction))
@@ -135,7 +150,12 @@ disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 }
 
 print_value :: proc(value: Value) {
-	fmt.printf("{}", value)
+	#partial switch t in value {
+	case ^Obj:
+		print_object(t)
+	case:
+		fmt.printf("{}", value)
+	}
 }
 
 

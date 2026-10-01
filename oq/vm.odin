@@ -4,24 +4,33 @@ import "core:bufio"
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:strings"
 
 DEBUG :: false
-DEBUG_PRINT_CODE :: false
+DEBUG_PRINT_CODE :: true
 
 VM :: struct {
-	chunk: ^Chunk,
-	stack: Stack,
-	ip:    int,
+	stack:   Stack,
+	globals: Table,
+	strings: Table,
+	objects: ^Obj,
+	chunk:   ^Chunk,
+	ip:      int,
 }
 
 vm: VM
 
 init_vm :: proc() {
 	vm.stack.index = 1
+	vm.objects = nil
+	table_init(&vm.globals)
+	table_init(&vm.strings)
 }
 
 free_vm :: proc() {
-
+	free_objects()
+	table_free(&vm.globals)
+	table_free(&vm.strings)
 }
 
 read_byte :: #force_inline proc "contextless" () -> u8 {
@@ -35,11 +44,9 @@ run :: proc() -> InterpretResult {
 		instruction: Op = Op(read_byte())
 		#partial switch instruction {
 		case .RETURN:
-			print_value(pop())
-			fmt.print("\n")
 			return InterpretResult.OK
 		case .CONSTANT:
-			constant: Value = read_constant(read_byte())
+			constant: Value = read_constant()
 			push(constant)
 			break
 		case .NEGATE:
@@ -48,13 +55,20 @@ run :: proc() -> InterpretResult {
 				return .RUNTIME_ERROR
 			}
 			push(-as_number(pop()))
-		case .ADD, .SUB, .MUL, .DIV, .MOD, .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL, .POW:
+		case .ADD:
+			if is_string(peep_stack(0)) && is_string(peep_stack(1)) {
+				concatenate()
+			} else if !binary_op(instruction) {
+				runtime_error("Operands must be a number or string.")
+				return .RUNTIME_ERROR
+			}
+		case .SUB, .MUL, .DIV, .MOD, .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL, .POW:
 			if !binary_op(instruction) {
-				runtime_error("Operands must be a number,")
+				runtime_error("Operands must be a number.")
 				return .RUNTIME_ERROR
 			}
 		case .EQUAL:
-			push(pop() == pop())
+			push(values_equal(pop(), pop()))
 		case .NOT_EQUAL:
 			push(pop() != pop())
 		case .NOT:
@@ -65,6 +79,15 @@ run :: proc() -> InterpretResult {
 			push(true)
 		case .FALSE:
 			push(false)
+		case .PRINT:
+			print_value(pop())
+			fmt.printf("\n")
+		case .POP:
+			pop()
+		case .DEFINE_GLOBAL:
+			name := read_string()
+			table_insert(&vm.globals, name, peep_stack(0))
+			pop()
 		}
 	}
 }
@@ -98,6 +121,13 @@ binary_op :: #force_inline proc "contextless" (instruction: Op) -> bool {
 		push(b >= a)
 	}
 	return true
+}
+
+concatenate :: proc() {
+	b := as_string(pop())
+	a := as_string(pop())
+	result := take_string(strings.concatenate([]string{a.str, b.str}))
+	push(result)
 }
 
 runtime_error :: proc(format: string, args: ..any) {
@@ -147,6 +177,23 @@ load_file :: proc(filepath: string) -> string {
 	return string(data)
 }
 
+synchronize :: proc() {
+	parser.panic_mode = false
+
+	for parser.current.type != .EOF {
+		if parser.previous.type == .SEMICOLON do return
+		#partial switch parser.current.type {
+		case .STRUCT, .PROC, .VAR, .FOR, .IF, .WHILE, .PRINT, .RETURN:
+			return
+		}
+		parser_advance()
+	}
+}
+
+read_string :: #force_inline proc "contextless" () -> ^ObjString {
+	return as_string(read_constant())
+}
+
 run_vm :: proc() {
 	init_vm()
 
@@ -164,4 +211,6 @@ run_vm :: proc() {
 		fmt.printfln("Usage: oqlang [filepath].")
 		return
 	}
+
+	free_vm()
 }

@@ -55,7 +55,7 @@ rules := [TokenType]ParseRule {
 	.LESS          = {nil, binary, .COMPARISON},
 	.LESS_EQUAL    = {nil, binary, .COMPARISON},
 	.IDENTIFIER    = {nil, nil, .NONE},
-	.STRING        = {nil, nil, .NONE},
+	.STRING        = {string_, nil, .NONE},
 	.NUMBER        = {number, nil, .NONE},
 	.AND           = {nil, nil, .NONE},
 	.STRUCT        = {nil, nil, .NONE},
@@ -99,10 +99,15 @@ compile :: proc(code: string, chunk: ^Chunk) -> bool {
 	compiling_chunk = chunk
 	parser.had_error = false
 	parser_advance()
-	expression()
-	consume(.EOF, "Expect end of expression.")
+	for !token_match(.EOF) {
+		declaration()
+	}
 	end_compiler()
 	return !parser.had_error
+}
+
+string_ :: proc() {
+	emit_constant(allocate_string(parser.previous.text[1:parser.previous.length - 1]))
 }
 
 number :: proc() {
@@ -113,11 +118,11 @@ number :: proc() {
 literal :: proc() {
 	#partial switch parser.previous.type {
 	case .FALSE:
-		emit_byte(.FALSE)
+		emit_byte(u8(Op.FALSE))
 	case .TRUE:
-		emit_byte(.TRUE)
+		emit_byte(u8(Op.TRUE))
 	case .NIL:
-		emit_byte(.NIL)
+		emit_byte(u8(Op.NIL))
 	}
 }
 
@@ -128,9 +133,9 @@ unary :: proc() {
 
 	#partial switch operator_type {
 	case .BANG:
-		emit_byte(.NOT)
+		emit_byte(u8(Op.NOT))
 	case .MINUS:
-		emit_byte(.NEGATE)
+		emit_byte(u8(Op.NEGATE))
 	case:
 		return
 	}
@@ -144,29 +149,29 @@ binary :: proc() {
 
 	#partial switch operator_type {
 	case .PLUS:
-		emit_byte(.ADD)
+		emit_byte(u8(Op.ADD))
 	case .MINUS:
-		emit_byte(.SUB)
+		emit_byte(u8(Op.SUB))
 	case .STAR:
-		emit_byte(.MUL)
+		emit_byte(u8(Op.MUL))
 	case .SLASH:
-		emit_byte(.DIV)
+		emit_byte(u8(Op.DIV))
 	case .PERCENT:
-		emit_byte(.MOD)
+		emit_byte(u8(Op.MOD))
 	case .CARET:
-		emit_byte(.POW)
+		emit_byte(u8(Op.POW))
 	case .BANG_EQUAL:
-		emit_byte(.NOT_EQUAL)
+		emit_byte(u8(Op.NOT_EQUAL))
 	case .EQUAL_EQUAL:
-		emit_byte(.EQUAL)
+		emit_byte(u8(Op.EQUAL))
 	case .GREATER:
-		emit_byte(.GREATER)
+		emit_byte(u8(Op.GREATER))
 	case .GREATER_EQUAL:
-		emit_byte(.GREATER_EQUAL)
+		emit_byte(u8(Op.GREATER_EQUAL))
 	case .LESS:
-		emit_byte(.LESS)
+		emit_byte(u8(Op.LESS))
 	case .LESS_EQUAL:
-		emit_byte(.LESS_EQUAL)
+		emit_byte(u8(Op.LESS_EQUAL))
 	case:
 		return
 	}
@@ -179,6 +184,56 @@ grouping :: proc() {
 
 expression :: proc() {
 	parse_precedence(.ASSIGNMENT)
+}
+
+declaration :: proc() {
+	if token_match(.VAR) {
+		var_declaration()
+	} else {
+		statement()
+	}
+
+	if parser.panic_mode do synchronize()
+}
+
+statement :: proc() {
+	if token_match(.PRINT) {
+		print_statement()
+	}
+}
+
+expression_statement :: proc() {
+	expression()
+	consume(.SEMICOLON, "Expect ';' after expression.")
+	emit_byte(u8(Op.POP))
+}
+
+var_declaration :: proc() {
+	global := parse_variable("Expect variable name.")
+
+	if token_match(.EQUAL) {
+		expression()
+	} else {
+		emit_byte(u8(Op.NIL))
+	}
+	consume(.SEMICOLON, "Expect ';' after variable declaration.")
+	define_variable(global)
+}
+
+print_statement :: proc() {
+	expression()
+	consume(.SEMICOLON, "Expect ';' after value.")
+	emit_byte(u8(Op.PRINT))
+}
+
+token_match :: proc(type: TokenType) -> bool {
+	if !token_check(type) do return false
+	parser_advance()
+	return true
+}
+
+token_check :: #force_inline proc "contextless" (type: TokenType) -> bool {
+	return parser.current.type == type
 }
 
 parse_precedence :: proc(precedence: Precedence) {
@@ -195,6 +250,19 @@ parse_precedence :: proc(precedence: Precedence) {
 		infix_rule := rule_get(parser.previous.type).infix
 		infix_rule()
 	}
+}
+
+parse_variable :: proc(message: string) -> u8 {
+	consume(.IDENTIFIER, message)
+	return identifier_constant(&parser.previous)
+}
+
+identifier_constant :: proc(name: ^Token) -> u8 {
+	return make_constant(allocate_string(name.text))
+}
+
+define_variable :: proc(global: u8) {
+	emit_bytes(u8(Op.DEFINE_GLOBAL), global)
 }
 
 rule_get :: proc(type: TokenType) -> ^ParseRule {
@@ -217,11 +285,11 @@ emit_constant :: proc(value: Value) {
 	write_constant(current_chunk(), value, u32(parser.previous.line))
 }
 
-emit_byte :: proc(byte: Op) {
+emit_byte :: proc(byte: u8) {
 	write_chunk(current_chunk(), u8(byte), u32(parser.previous.line))
 }
 
-emit_bytes :: proc(byte1, byte2: Op) {
+emit_bytes :: proc(byte1, byte2: u8) {
 	emit_byte(byte1)
 	emit_byte(byte2)
 }
@@ -236,7 +304,7 @@ end_compiler :: proc() {
 }
 
 emit_return :: proc() {
-	emit_byte(.RETURN)
+	emit_byte(u8(Op.RETURN))
 }
 
 error_at_current :: proc(message: string) {

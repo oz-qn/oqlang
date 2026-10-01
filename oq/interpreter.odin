@@ -19,7 +19,6 @@ interpret :: proc(code: string) -> InterpretResult {
 	vm.ip = 0
 
 	result: InterpretResult = run()
-
 	free_chunk(&chunk)
 	return result
 }

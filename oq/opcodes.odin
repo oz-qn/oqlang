@@ -20,5 +20,8 @@ Op :: distinct enum u8 {
 	NIL,
 	TRUE,
 	FALSE,
+	PRINT,
+	POP,
+	DEFINE_GLOBAL,
 	RETURN,
 }
