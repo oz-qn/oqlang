@@ -54,7 +54,7 @@ rules := [TokenType]ParseRule {
 	.GREATER_EQUAL = {nil, binary, .COMPARISON},
 	.LESS          = {nil, binary, .COMPARISON},
 	.LESS_EQUAL    = {nil, binary, .COMPARISON},
-	.IDENTIFIER    = {nil, nil, .NONE},
+	.IDENTIFIER    = {variable, nil, .NONE},
 	.STRING        = {string_, nil, .NONE},
 	.NUMBER        = {number, nil, .NONE},
 	.AND           = {nil, nil, .NONE},
@@ -113,6 +113,15 @@ string_ :: proc() {
 number :: proc() {
 	value, ok := strconv.parse_f64(parser.previous.text)
 	emit_constant(value)
+}
+
+variable :: proc() {
+	named_variable(&parser.previous)
+}
+
+named_variable :: proc(name: ^Token) {
+	arg := identifier_constant(name)
+	emit_bytes(u8(Op.GET_GLOBAL), arg)
 }
 
 literal :: proc() {
@@ -199,6 +208,8 @@ declaration :: proc() {
 statement :: proc() {
 	if token_match(.PRINT) {
 		print_statement()
+	} else {
+		expression_statement()
 	}
 }
 
@@ -221,7 +232,9 @@ var_declaration :: proc() {
 }
 
 print_statement :: proc() {
+	consume(.LEFT_PAREN, "Missing '(' after function call.")
 	expression()
+	consume(.RIGHT_PAREN, "Missing ')' after function call.")
 	consume(.SEMICOLON, "Expect ';' after value.")
 	emit_byte(u8(Op.PRINT))
 }
@@ -318,14 +331,14 @@ error :: proc(message: string) {
 error_at :: proc(token: ^Token, message: string) {
 	if parser.panic_mode do return
 	parser.panic_mode = true
-	fmt.eprintf("[line %v] Error", token.line)
+	fmt.eprintf("[line %v column %v] Error", token.line, token.start)
 
 	if token.type == .EOF {
 		fmt.print(" at end")
 	} else if token.type == .ERROR {
 
 	} else {
-		fmt.eprintf(" at '{}'", token.start)
+		fmt.eprintf(" at '{}'", token.text)
 	}
 
 	fmt.eprintf(": {}\n", message)

@@ -23,5 +23,6 @@ Op :: distinct enum u8 {
 	PRINT,
 	POP,
 	DEFINE_GLOBAL,
+	GET_GLOBAL,
 	RETURN,
 }

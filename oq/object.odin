@@ -15,7 +15,6 @@ Obj :: struct {
 ObjString :: struct {
 	using obj: Obj,
 	str:       string,
-	hash:      u32,
 }
 
 free_objects :: proc() {
@@ -51,18 +50,8 @@ allocate_string :: #force_inline proc(str: string) -> ^ObjString {
 	}
 	strobj := allocate_object_type(ObjString, .String)
 	strobj.str = strings.clone(str)
-	strobj.hash = string_hash(str)
 	table_insert(&vm.strings, strobj, strobj)
 	return strobj
-}
-
-string_hash :: proc(str: string) -> u32 {
-	hash: u32 = 2166136261
-	for char in str {
-		hash ~= transmute(u32)char
-		hash *= 16777619
-	}
-	return hash
 }
 
 take_string :: #force_inline proc(str: string) -> ^ObjString {
@@ -72,7 +61,6 @@ take_string :: #force_inline proc(str: string) -> ^ObjString {
 	}
 	strobj := allocate_object_type(ObjString, .String)
 	strobj.str = str
-	strobj.hash = string_hash(str)
 	table_insert(&vm.strings, strobj, strobj)
 	return strobj
 }

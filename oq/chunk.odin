@@ -143,6 +143,8 @@ disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 		return simple_instruction("OP_POP", index)
 	case Op.DEFINE_GLOBAL:
 		return constant_instruction("OP_DEFINE_GLOBAL", chunk, index)
+	case Op.GET_GLOBAL:
+		return constant_instruction("OP_GET_GLOBAL", chunk, index)
 	}
 
 	fmt.printf("unknown opcode {}\n", Op(instruction))

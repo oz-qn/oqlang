@@ -88,6 +88,14 @@ run :: proc() -> InterpretResult {
 			name := read_string()
 			table_insert(&vm.globals, name, peep_stack(0))
 			pop()
+		case .GET_GLOBAL:
+			name := read_string()
+			value, ok := table_get(&vm.globals, name)
+			if !ok {
+				runtime_error("Undefined variable '%s'.", name.str)
+				return .RUNTIME_ERROR
+			}
+			push(value)
 		}
 	}
 }
