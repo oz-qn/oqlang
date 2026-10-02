@@ -10,6 +10,16 @@ table_insert :: #force_inline proc "contextless" (table: ^Table, key: ^ObjString
 	table[key.str] = value
 }
 
+table_set :: #force_inline proc "contextless" (
+	table: ^Table,
+	key: ^ObjString,
+	value: Value,
+) -> bool {
+	key_exists := key.str in table
+	table_insert(table, key, value)
+	return key_exists
+}
+
 table_remove :: #force_inline proc(table: ^Table, key: ^ObjString) -> bool {
 	if !(key.str in table) do return false
 	k, v := delete_key(table, key.str)

@@ -24,5 +24,6 @@ Op :: distinct enum u8 {
 	POP,
 	DEFINE_GLOBAL,
 	GET_GLOBAL,
+	SET_GLOBAL,
 	RETURN,
 }

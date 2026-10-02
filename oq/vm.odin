@@ -7,7 +7,7 @@ import "core:os"
 import "core:strings"
 
 DEBUG :: false
-DEBUG_PRINT_CODE :: true
+DEBUG_PRINT_CODE :: false
 
 VM :: struct {
 	stack:   Stack,
@@ -96,6 +96,13 @@ run :: proc() -> InterpretResult {
 				return .RUNTIME_ERROR
 			}
 			push(value)
+		case .SET_GLOBAL:
+			name := read_string()
+			if !table_set(&vm.globals, name, peep_stack(0)) {
+				table_remove(&vm.globals, name)
+				runtime_error("Undefined variable '%s'.", name.str)
+				return .RUNTIME_ERROR
+			}
 		}
 	}
 }

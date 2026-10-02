@@ -3,7 +3,7 @@ package OQ
 import "core:fmt"
 import "core:strconv"
 
-ParseFn :: proc()
+ParseFn :: #type proc(can_assign: bool)
 
 Parser :: struct {
 	current:    Token,
@@ -106,25 +106,30 @@ compile :: proc(code: string, chunk: ^Chunk) -> bool {
 	return !parser.had_error
 }
 
-string_ :: proc() {
+string_ :: proc(can_assign: bool) {
 	emit_constant(allocate_string(parser.previous.text[1:parser.previous.length - 1]))
 }
 
-number :: proc() {
+number :: proc(can_assign: bool) {
 	value, ok := strconv.parse_f64(parser.previous.text)
 	emit_constant(value)
 }
 
-variable :: proc() {
-	named_variable(&parser.previous)
+variable :: proc(can_assign: bool) {
+	named_variable(&parser.previous, can_assign)
 }
 
-named_variable :: proc(name: ^Token) {
+named_variable :: proc(name: ^Token, can_assign: bool) {
 	arg := identifier_constant(name)
-	emit_bytes(u8(Op.GET_GLOBAL), arg)
+	if can_assign && token_match(.EQUAL) {
+		expression()
+		emit_bytes(u8(Op.SET_GLOBAL), arg)
+	} else {
+		emit_bytes(u8(Op.GET_GLOBAL), arg)
+	}
 }
 
-literal :: proc() {
+literal :: proc(can_assign: bool) {
 	#partial switch parser.previous.type {
 	case .FALSE:
 		emit_byte(u8(Op.FALSE))
@@ -135,7 +140,7 @@ literal :: proc() {
 	}
 }
 
-unary :: proc() {
+unary :: proc(can_assign: bool) {
 	operator_type := parser.previous.type
 
 	parse_precedence(.UNARY)
@@ -150,7 +155,7 @@ unary :: proc() {
 	}
 }
 
-binary :: proc() {
+binary :: proc(can_assign: bool) {
 	operator_type := parser.previous.type
 
 	rule := rule_get(operator_type)
@@ -186,7 +191,8 @@ binary :: proc() {
 	}
 }
 
-grouping :: proc() {
+grouping :: proc(can_assign: bool) {
+
 	expression()
 	consume(.RIGHT_PAREN, "Expect ')' after expression.")
 }
@@ -256,12 +262,18 @@ parse_precedence :: proc(precedence: Precedence) {
 		error("Expect expression.")
 		return
 	}
-	prefix_rule()
+
+	can_assign := precedence <= .ASSIGNMENT
+	prefix_rule(can_assign)
 
 	for precedence <= rule_get(parser.current.type).precedence {
 		parser_advance()
 		infix_rule := rule_get(parser.previous.type).infix
-		infix_rule()
+		infix_rule(can_assign)
+	}
+
+	if can_assign && token_match(.EQUAL) {
+		error("Invalid assignment target.")
 	}
 }
 
