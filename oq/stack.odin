@@ -2,6 +2,7 @@ package OQ
 
 import "base:intrinsics"
 import "base:runtime"
+import "core:fmt"
 import "core:mem"
 
 STACK_MAX :: 256
@@ -34,8 +35,8 @@ pop :: #force_inline proc "contextless" () -> Value {
 	return vm.stack.data[vm.stack.index]
 }
 
-peep_stack :: #force_inline proc "contextless" (distance: int) -> Value {
-	return vm.stack.data[vm.stack.index - 1]
+peep_stack :: #force_inline proc "contextless" (distance: u16) -> Value {
+	return vm.stack.data[vm.stack.index - 1 - distance]
 }
 
 reset_stack :: #force_inline proc "contextless" () {

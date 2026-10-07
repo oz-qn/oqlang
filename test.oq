@@ -1,2 +1,3 @@
-var a = "Hello World!";
-print(a);
+if (1 + 2) == 3 {
+	print("yay!");
+}

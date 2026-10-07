@@ -147,6 +147,16 @@ disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 		return constant_instruction("OP_GET_GLOBAL", chunk, index)
 	case Op.SET_GLOBAL:
 		return constant_instruction("OP_SET_GLOBAL", chunk, index)
+	case Op.GET_LOCAL:
+		return byte_instruction("OP_GET_LOCAL", chunk, index)
+	case Op.SET_LOCAL:
+		return byte_instruction("OP_SET_LOCAL", chunk, index)
+	case Op.JUMP:
+		return jump_instruction("OP_JUMP", 1, chunk, index)
+	case Op.JUMP_IF_FALSE:
+		return jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, index)
+	case Op.LOOP:
+		return jump_instruction("OP_LOOP", -1, chunk, index)
 	}
 
 	fmt.printf("unknown opcode {}\n", Op(instruction))
@@ -174,6 +184,19 @@ constant_instruction :: #force_inline proc(name: string, chunk: ^Chunk, index: i
 	print_value(chunk.constants[constant])
 	fmt.print("'\n")
 	return index + 1
+}
+
+byte_instruction :: proc(name: string, chunk: ^Chunk, index: int) -> int {
+	slot := chunk.code[index + 1]
+	fmt.printf("{} {}\n", name, slot)
+	return index + 1
+}
+
+jump_instruction :: proc(name: string, sign: int, chunk: ^Chunk, index: int) -> int {
+	jump := u16(chunk.code[index + 1] << 8)
+	jump |= u16(chunk.code[index + 2])
+	fmt.printf("{} {} -> {}\n", name, index, index + 3 + sign * int(jump))
+	return index + 2
 }
 
 constant_long_instruction :: #force_inline proc(name: string, chunk: ^Chunk, index: int) -> int {

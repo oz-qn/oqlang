@@ -25,5 +25,10 @@ Op :: distinct enum u8 {
 	DEFINE_GLOBAL,
 	GET_GLOBAL,
 	SET_GLOBAL,
+	GET_LOCAL,
+	SET_LOCAL,
+	LOOP,
+	JUMP,
+	JUMP_IF_FALSE,
 	RETURN,
 }

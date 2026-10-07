@@ -57,7 +57,7 @@ Token :: struct {
 
 token_make :: #force_inline proc(type: TokenType) -> Token {
 	return Token {
-		text = scanner.code[scanner.start:scanner.start + (scanner.current - scanner.start)],
+		text = scanner.code[scanner.start:scanner.current],
 		type = type,
 		start = scanner.start,
 		length = scanner.current - scanner.start,

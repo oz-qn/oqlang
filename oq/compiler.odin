@@ -3,6 +3,9 @@ package OQ
 import "core:fmt"
 import "core:strconv"
 
+U8_COUNT :: 256
+U16_MAX :: 65535
+
 ParseFn :: #type proc(can_assign: bool)
 
 Parser :: struct {
@@ -32,6 +35,18 @@ ParseRule :: struct {
 	precedence: Precedence,
 }
 
+Compiler :: struct {
+	locals:      [U8_COUNT]Local,
+	local_count: int,
+	scope_depth: int,
+}
+
+Local :: struct {
+	name:  Token,
+	depth: int,
+}
+
+@(rodata)
 rules := [TokenType]ParseRule {
 	.LEFT_PAREN    = {grouping, nil, .NONE},
 	.RIGHT_PAREN   = {nil, nil, .NONE},
@@ -57,7 +72,7 @@ rules := [TokenType]ParseRule {
 	.IDENTIFIER    = {variable, nil, .NONE},
 	.STRING        = {string_, nil, .NONE},
 	.NUMBER        = {number, nil, .NONE},
-	.AND           = {nil, nil, .NONE},
+	.AND           = {nil, and_, .AND},
 	.STRUCT        = {nil, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.FALSE         = {literal, nil, .NONE},
@@ -65,7 +80,7 @@ rules := [TokenType]ParseRule {
 	.PROC          = {nil, nil, .NONE},
 	.IF            = {nil, nil, .NONE},
 	.NIL           = {literal, nil, .NONE},
-	.OR            = {nil, nil, .NONE},
+	.OR            = {nil, or_, .OR},
 	.PRINT         = {nil, nil, .NONE},
 	.RETURN        = {nil, nil, .NONE},
 	.SUPER         = {nil, nil, .NONE},
@@ -80,6 +95,7 @@ rules := [TokenType]ParseRule {
 }
 
 parser: Parser
+current: ^Compiler
 
 compiling_chunk: ^Chunk
 
@@ -94,8 +110,16 @@ parser_advance :: proc() {
 	}
 }
 
+init_compiler :: proc(compiler: ^Compiler) {
+	compiler.local_count = 0
+	compiler.scope_depth = 0
+	current = compiler
+}
+
 compile :: proc(code: string, chunk: ^Chunk) -> bool {
 	scanner_init(code)
+	compiler: Compiler
+	init_compiler(&compiler)
 	compiling_chunk = chunk
 	parser.had_error = false
 	parser_advance()
@@ -115,18 +139,59 @@ number :: proc(can_assign: bool) {
 	emit_constant(value)
 }
 
+and_ :: proc(can_assign: bool) {
+	end_jump := emit_jump(u8(Op.JUMP_IF_FALSE))
+	emit_byte(u8(Op.POP))
+	parse_precedence(.AND)
+	patch_jump(end_jump)
+}
+
+or_ :: proc(can_assign: bool) {
+	else_jump := emit_jump(u8(Op.JUMP_IF_FALSE))
+	end_jump := emit_jump(u8(Op.JUMP))
+	patch_jump(else_jump)
+	emit_byte(u8(Op.POP))
+
+	parse_precedence(.OR)
+	patch_jump(end_jump)
+}
+
 variable :: proc(can_assign: bool) {
 	named_variable(&parser.previous, can_assign)
 }
 
 named_variable :: proc(name: ^Token, can_assign: bool) {
-	arg := identifier_constant(name)
+	get_op, set_op: u8
+	arg, ok := resolve_local(current, name)
+
+	if ok {
+		get_op = u8(Op.GET_LOCAL)
+		set_op = u8(Op.SET_LOCAL)
+	} else {
+		arg = identifier_constant(name)
+		get_op = u8(Op.GET_GLOBAL)
+		set_op = u8(Op.SET_GLOBAL)
+	}
+
 	if can_assign && token_match(.EQUAL) {
 		expression()
-		emit_bytes(u8(Op.SET_GLOBAL), arg)
+		emit_bytes(set_op, arg)
 	} else {
-		emit_bytes(u8(Op.GET_GLOBAL), arg)
+		emit_bytes(get_op, arg)
 	}
+}
+
+resolve_local :: proc(compiler: ^Compiler, name: ^Token) -> (u8, bool) {
+	for i := compiler.local_count - 1; i >= 0; i -= 1 {
+		local := &compiler.locals[i]
+		if identifier_equals(name, &local.name) {
+			if local.depth == -1 {
+				error("Can't read local variable in its own initializer.")
+			}
+			return u8(i), true
+		}
+	}
+	return 0, false
 }
 
 literal :: proc(can_assign: bool) {
@@ -214,15 +279,149 @@ declaration :: proc() {
 statement :: proc() {
 	if token_match(.PRINT) {
 		print_statement()
+	} else if token_match(.IF) {
+		if_statement()
+	} else if token_match(.WHILE) {
+		while_statement()
+	} else if token_match(.FOR) {
+		for_statement()
+	} else if token_match(.LEFT_BRACE) {
+		begin_scope()
+		block()
+		end_scope()
 	} else {
 		expression_statement()
 	}
+}
+
+if_statement :: proc() {
+	expression()
+	non_consume(.LEFT_BRACE, "Expect '{' block after 'if'.")
+
+	then_jump := emit_jump(u8(Op.JUMP_IF_FALSE))
+	emit_byte(u8(Op.POP))
+	statement()
+	else_jump := emit_jump(u8(Op.JUMP))
+	patch_jump(then_jump)
+	emit_byte(u8(Op.POP))
+
+	if token_match(.ELSE) do statement()
+	patch_jump(else_jump)
+}
+
+while_statement :: proc() {
+	loop_start := len(current_chunk().code)
+
+	expression()
+	non_consume(.LEFT_BRACE, "Expect '{' block after 'while'.")
+
+	exit_jump := emit_jump(u8(Op.JUMP_IF_FALSE))
+	emit_byte(u8(Op.POP))
+	statement()
+	emit_loop(loop_start)
+
+	patch_jump(exit_jump)
+	emit_byte(u8(Op.POP))
+}
+
+for_statement :: proc() {
+	begin_scope()
+
+	if token_match(.SEMICOLON) {
+
+	} else if token_match(.VAR) {
+		var_declaration()
+	} else {
+		expression_statement()
+	}
+
+	loop_start := len(current_chunk().code)
+	exit_jump: int = -1
+
+	if !token_match(.SEMICOLON) {
+		expression()
+		consume(.SEMICOLON, "Expect ';' after loop condition.")
+
+		exit_jump = emit_jump(u8(Op.JUMP_IF_FALSE))
+		emit_byte(u8(Op.POP))
+	}
+
+	if !token_match(.LEFT_BRACE) {
+		body_jump := emit_jump(u8(Op.JUMP))
+		increment_start := len(current_chunk().code)
+		expression()
+		emit_byte(u8(Op.POP))
+		non_consume(.LEFT_BRACE, "Expect '{' after for clauses.")
+
+		emit_loop(loop_start)
+		loop_start = increment_start
+		patch_jump(body_jump)
+	}
+
+	statement()
+	emit_loop(loop_start)
+
+	if exit_jump != -1 {
+		patch_jump(exit_jump)
+		emit_byte(u8(Op.POP))
+	}
+
+	end_scope()
+}
+
+emit_loop :: proc(loop_start: int) {
+	emit_byte(u8(Op.LOOP))
+
+	offset := len(current_chunk().code) - loop_start + 2
+	if offset > U16_MAX do error("Loop body too large.")
+
+	emit_byte(u8(u16(offset >> 8) & 0xff))
+	emit_byte(u8(offset & 0xff))
+}
+
+emit_jump :: proc(instruction: u8) -> int {
+	emit_byte(instruction)
+	emit_byte(0xff)
+	emit_byte(0xff)
+	return len(current_chunk().code) - 2
+}
+
+patch_jump :: proc(offset: int) {
+	jump := len(current_chunk().code) - offset - 2
+
+	if jump > U16_MAX {
+		error("Too much code to jump over.")
+	}
+
+	current_chunk().code[offset] = u8((jump >> 8) & 0xff)
+	current_chunk().code[offset + 1] = u8(jump & 0xff)
 }
 
 expression_statement :: proc() {
 	expression()
 	consume(.SEMICOLON, "Expect ';' after expression.")
 	emit_byte(u8(Op.POP))
+}
+
+begin_scope :: proc() {
+	current.scope_depth += 1
+}
+
+end_scope :: proc() {
+	current.scope_depth -= 1
+
+	for current.local_count > 0 &&
+	    current.locals[current.local_count - 1].depth > current.scope_depth {
+		emit_byte(u8(Op.POP))
+		current.local_count -= 1
+	}
+}
+
+block :: proc() {
+	for !token_check(.RIGHT_BRACE) && !token_check(.EOF) {
+		declaration()
+	}
+	consume(.RIGHT_BRACE, "Expect '}' after block.")
 }
 
 var_declaration :: proc() {
@@ -279,6 +478,8 @@ parse_precedence :: proc(precedence: Precedence) {
 
 parse_variable :: proc(message: string) -> u8 {
 	consume(.IDENTIFIER, message)
+	declare_variable()
+	if current.scope_depth > 0 do return 0
 	return identifier_constant(&parser.previous)
 }
 
@@ -286,8 +487,49 @@ identifier_constant :: proc(name: ^Token) -> u8 {
 	return make_constant(allocate_string(name.text))
 }
 
+declare_variable :: proc() {
+	if current.scope_depth == 0 do return
+	name: ^Token = &parser.previous
+	for i := (current.local_count - 1); i >= 0; i -= 1 {
+		local := &current.locals[i]
+		if local.depth != -1 && local.depth < current.scope_depth {
+			break
+		}
+
+		if identifier_equals(name, &local.name) {
+			error("Already a variable with this name in this scope.")
+		}
+	}
+	add_local(name^)
+}
+
+identifier_equals :: proc(a, b: ^Token) -> bool {
+	if a.length != b.length do return false
+	return a.text == b.text
+}
+
+add_local :: proc(name: Token) {
+	if current.local_count == U8_COUNT {
+		error("Too many local variables in function.")
+		return
+	}
+
+	local := &current.locals[current.local_count]
+	current.local_count += 1
+	local.name = name
+	local.depth = -1
+}
+
 define_variable :: proc(global: u8) {
+	if current.scope_depth > 0 {
+		mark_initialized()
+		return
+	}
 	emit_bytes(u8(Op.DEFINE_GLOBAL), global)
+}
+
+mark_initialized :: proc() {
+	current.locals[current.local_count - 1].depth = current.scope_depth
 }
 
 rule_get :: proc(type: TokenType) -> ^ParseRule {
@@ -297,6 +539,13 @@ rule_get :: proc(type: TokenType) -> ^ParseRule {
 consume :: proc(type: TokenType, message: string) {
 	if parser.current.type == type {
 		parser_advance()
+		return
+	}
+	error_at_current(message)
+}
+
+non_consume :: proc(type: TokenType, message: string) {
+	if parser.current.type == type {
 		return
 	}
 	error_at_current(message)

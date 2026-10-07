@@ -21,7 +21,7 @@ VM :: struct {
 vm: VM
 
 init_vm :: proc() {
-	vm.stack.index = 1
+	vm.stack.index = 0
 	vm.objects = nil
 	table_init(&vm.globals)
 	table_init(&vm.strings)
@@ -37,6 +37,11 @@ read_byte :: #force_inline proc "contextless" () -> u8 {
 	result := vm.chunk.code[vm.ip]
 	vm.ip += 1
 	return result
+}
+
+read_u16 :: #force_inline proc "contextless" () -> u16 {
+	vm.ip += 2
+	return (u16(vm.chunk.code[vm.ip - 2]) << 8) | u16(vm.chunk.code[vm.ip - 1])
 }
 
 run :: proc() -> InterpretResult {
@@ -103,6 +108,21 @@ run :: proc() -> InterpretResult {
 				runtime_error("Undefined variable '%s'.", name.str)
 				return .RUNTIME_ERROR
 			}
+		case .GET_LOCAL:
+			slot := read_byte()
+			push(vm.stack.data[slot])
+		case .SET_LOCAL:
+			slot := read_byte()
+			vm.stack.data[slot] = peep_stack(0)
+		case .JUMP_IF_FALSE:
+			offset := read_u16()
+			if is_falsey(peep_stack(0)) do vm.ip += int(offset)
+		case .JUMP:
+			offset := read_u16()
+			vm.ip += int(offset)
+		case .LOOP:
+			offset := read_u16()
+			vm.ip -= int(offset)
 		}
 	}
 }
