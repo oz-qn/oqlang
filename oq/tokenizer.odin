@@ -9,6 +9,7 @@ TokenType :: enum u8 {
 	DOT,
 	MINUS,
 	PLUS,
+	PLUS_EQUALS,
 	SEMICOLON,
 	COLON,
 	COLONCOLON,

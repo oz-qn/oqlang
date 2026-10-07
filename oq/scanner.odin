@@ -46,7 +46,7 @@ scan_token :: proc() -> Token {
 	case '-':
 		return token_make(.MINUS)
 	case '+':
-		return token_make(.PLUS)
+		return token_make(.PLUS_EQUALS if match('=') else .PLUS)
 	case '/':
 		return token_make(.SLASH)
 	case '*':

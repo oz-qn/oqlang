@@ -56,6 +56,7 @@ rules := [TokenType]ParseRule {
 	.DOT           = {nil, nil, .NONE},
 	.MINUS         = {unary, binary, .TERM},
 	.PLUS          = {nil, binary, .TERM},
+	.PLUS_EQUALS   = {nil, nil, .NONE},
 	.PERCENT       = {nil, binary, .TERM},
 	.SEMICOLON     = {nil, nil, .NONE},
 	.SLASH         = {nil, binary, .FACTOR},
@@ -173,9 +174,17 @@ named_variable :: proc(name: ^Token, can_assign: bool) {
 		set_op = u8(Op.SET_GLOBAL)
 	}
 
-	if can_assign && token_match(.EQUAL) {
-		expression()
-		emit_bytes(set_op, arg)
+	if type, ok := token_match_any(.EQUAL, .PLUS_EQUALS); can_assign && ok {
+		#partial switch type {
+		case .EQUAL:
+			expression()
+			emit_bytes(set_op, arg)
+		case .PLUS_EQUALS:
+			emit_bytes(get_op, arg)
+			expression()
+			emit_byte(u8(Op.ADD))
+			emit_bytes(set_op, arg)
+		}
 	} else {
 		emit_bytes(get_op, arg)
 	}
@@ -448,6 +457,16 @@ token_match :: proc(type: TokenType) -> bool {
 	if !token_check(type) do return false
 	parser_advance()
 	return true
+}
+
+token_match_any :: proc(types: ..TokenType) -> (TokenType, bool) {
+	for type in types {
+		if token_check(type) {
+			parser_advance()
+			return type, true
+		}
+	}
+	return .DOT, false
 }
 
 token_check :: #force_inline proc "contextless" (type: TokenType) -> bool {
