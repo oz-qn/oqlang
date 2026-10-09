@@ -7,7 +7,7 @@ import "core:os"
 import "core:strings"
 
 DEBUG :: false
-DEBUG_PRINT_CODE :: false
+DEBUG_PRINT_CODE :: true
 
 FRAMES_MAX :: 64
 

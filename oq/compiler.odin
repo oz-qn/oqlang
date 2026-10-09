@@ -138,7 +138,7 @@ token_check_next :: proc(type: TokenType) -> bool {
 	return parser.next.type == type
 }
 
-token_var_decl :: #force_inline proc() -> bool {
+token_decl :: #force_inline proc() -> bool {
 	return token_check(.IDENTIFIER) && token_check_next(.COLON_EQUALS)
 }
 
@@ -360,10 +360,14 @@ expression :: proc() {
 }
 
 declaration :: proc() {
-	if token_check(.IDENTIFIER) && token_check_next(.PROC) {
-		proc_declaration()
-	} else if token_var_decl() {
-		var_declaration()
+	if token_decl() {
+		consume(.IDENTIFIER, "Should be impossible to hit this one.")
+		if token_check_next(.PROC) {
+			fmt.println("Declaring a function")
+			proc_declaration()
+		} else {
+			var_declaration()
+		}
 	} else {
 		statement()
 	}
@@ -424,7 +428,7 @@ for_statement :: proc() {
 
 	if token_match(.SEMICOLON) {
 
-	} else if token_var_decl() {
+	} else if token_decl() {
 		var_declaration()
 	} else {
 		expression_statement()
@@ -531,7 +535,8 @@ procedure :: proc(type: ProcedureType) {
 	init_compiler(&compiler, type)
 	begin_scope()
 
-	consume(.PROC, "Expect 'proc' after procedure name.")
+	consume(.COLON_EQUALS, "Expect ':=' after proc name.")
+	consume(.PROC, "Expect 'proc' after declaration.")
 	consume(.LEFT_PAREN, "Expect '(' after procedure name.")
 
 	if !token_check(.RIGHT_PAREN) {
@@ -617,7 +622,6 @@ parse_precedence :: proc(precedence: Precedence) {
 }
 
 parse_variable :: proc(message: string) -> u8 {
-	consume(.IDENTIFIER, message)
 	declare_variable()
 	if current.scope_depth > 0 do return 0
 	return identifier_constant(&parser.previous)

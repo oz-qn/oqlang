@@ -1,6 +1,7 @@
-hello_world proc() {
-	value := "Hello, World!"
-	print(value)
+test := proc() {
+	print("testing")
 }
 
-hello_world()
+my_value := 0;
+
+test()
