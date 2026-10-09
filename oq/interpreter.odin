@@ -7,18 +7,10 @@ InterpretResult :: enum {
 }
 
 interpret :: proc(code: string) -> InterpretResult {
-	chunk: Chunk
-	chunk_init(&chunk)
+	procedure := compile(code)
+	if procedure == nil do return .COMPILE_ERROR
 
-	if !compile(code, &chunk) {
-		free_chunk(&chunk)
-		return .COMPILE_ERROR
-	}
-
-	vm.chunk = &chunk
-	vm.ip = 0
-
-	result: InterpretResult = run()
-	free_chunk(&chunk)
-	return result
+	push(as_obj(procedure))
+	vm_call(procedure, 0)
+	return run()
 }

@@ -38,6 +38,9 @@ ParseRule :: struct {
 }
 
 Compiler :: struct {
+	enclosing:   ^Compiler,
+	procedure:   ^ObjProcedure,
+	type:        ProcedureType,
 	locals:      [U8_COUNT]Local,
 	local_count: int,
 	scope_depth: int,
@@ -48,9 +51,14 @@ Local :: struct {
 	depth: int,
 }
 
+ProcedureType :: enum {
+	PROCEDURE,
+	SCRIPT,
+}
+
 @(rodata)
 rules := [TokenType]ParseRule {
-	.LEFT_PAREN    = {grouping, nil, .NONE},
+	.LEFT_PAREN    = {grouping, call, .CALL},
 	.RIGHT_PAREN   = {nil, nil, .NONE},
 	.LEFT_BRACE    = {nil, nil, .NONE},
 	.RIGHT_BRACE   = {nil, nil, .NONE},
@@ -104,7 +112,6 @@ rules := [TokenType]ParseRule {
 parser: Parser
 current: ^Compiler
 
-compiling_chunk: ^Chunk
 
 parser_advance :: proc() {
 	parser.previous = parser.current
@@ -135,28 +142,45 @@ token_var_decl :: #force_inline proc() -> bool {
 	return token_check(.IDENTIFIER) && token_check_next(.COLON_EQUALS)
 }
 
-init_compiler :: proc(compiler: ^Compiler) {
+init_compiler :: proc(compiler: ^Compiler, type: ProcedureType) {
+	compiler.enclosing = current
+	compiler.procedure = nil
+	compiler.type = type
 	compiler.local_count = 0
 	compiler.scope_depth = 0
+	compiler.procedure = new_procedure()
 	current = compiler
+
+	if type != .SCRIPT {
+		current.procedure.name = copy_string(parser.previous.text)
+	}
+
+	local := &current.locals[current.local_count]
+	current.local_count += 1
+	local.depth = 0
+	local.name.text = ""
 }
 
-compile :: proc(code: string, chunk: ^Chunk) -> bool {
+compile :: proc(code: string) -> ^ObjProcedure {
 	scanner_init(code)
 	compiler: Compiler
-	init_compiler(&compiler)
-	compiling_chunk = chunk
+	init_compiler(&compiler, .SCRIPT)
 	parser.had_error = false
 	parser_advance()
 	for !token_match(.EOF) {
 		declaration()
 	}
-	end_compiler()
-	return !parser.had_error
+	procedure := end_compiler()
+	return nil if parser.had_error else procedure
+}
+
+call :: proc(can_assign: bool) {
+	arg_count := argument_list()
+	emit_bytes(u8(Op.CALL), arg_count)
 }
 
 string_ :: proc(can_assign: bool) {
-	emit_constant(allocate_string(parser.previous.text[1:parser.previous.length - 1]))
+	emit_constant(copy_string(parser.previous.text[1:parser.previous.length - 1]))
 }
 
 number :: proc(can_assign: bool) {
@@ -235,6 +259,22 @@ named_variable :: proc(name: ^Token, can_assign: bool) {
 	}
 }
 
+argument_list :: proc() -> u8 {
+	arg_count: u8 = 0
+	if !token_check(.RIGHT_PAREN) {
+		for {
+			expression()
+			if arg_count == 255 {
+				error("Can't have more than 255 arguments.")
+			}
+			arg_count += 1
+			if !token_match(.COMMA) do break
+		}
+	}
+	consume(.RIGHT_PAREN, "Expect ')' after arguments.")
+	return arg_count
+}
+
 resolve_local :: proc(compiler: ^Compiler, name: ^Token) -> (u8, bool) {
 	for i := compiler.local_count - 1; i >= 0; i -= 1 {
 		local := &compiler.locals[i]
@@ -311,7 +351,6 @@ binary :: proc(can_assign: bool) {
 }
 
 grouping :: proc(can_assign: bool) {
-
 	expression()
 	consume(.RIGHT_PAREN, "Expect ')' after expression.")
 }
@@ -321,7 +360,9 @@ expression :: proc() {
 }
 
 declaration :: proc() {
-	if token_var_decl() {
+	if token_check(.IDENTIFIER) && token_check_next(.PROC) {
+		proc_declaration()
+	} else if token_var_decl() {
 		var_declaration()
 	} else {
 		statement()
@@ -478,6 +519,41 @@ block :: proc() {
 	consume(.RIGHT_BRACE, "Expect '}' after block.")
 }
 
+proc_declaration :: proc() {
+	global := parse_variable("Expect procedure name.")
+	mark_initialized()
+	procedure(.PROCEDURE)
+	define_variable(global)
+}
+
+procedure :: proc(type: ProcedureType) {
+	compiler: Compiler
+	init_compiler(&compiler, type)
+	begin_scope()
+
+	consume(.PROC, "Expect 'proc' after procedure name.")
+	consume(.LEFT_PAREN, "Expect '(' after procedure name.")
+
+	if !token_check(.RIGHT_PAREN) {
+		for {
+			current.procedure.arity += 1
+			if current.procedure.arity > 255 {
+				error_at_current("Can't have more than 255 parameters.")
+			}
+			constant := parse_variable("Expect parameter name.")
+			define_variable(constant)
+			if !token_match(.COMMA) do break
+		}
+	}
+
+	consume(.RIGHT_PAREN, "Expect ')' after parameters.")
+	consume(.LEFT_BRACE, "Expect '{' before procedure body.")
+	block()
+
+	function := end_compiler()
+	emit_bytes(u8(Op.CONSTANT), make_constant(as_obj(function)))
+}
+
 var_declaration :: proc() {
 	global := parse_variable("Expect variable name.")
 
@@ -548,7 +624,7 @@ parse_variable :: proc(message: string) -> u8 {
 }
 
 identifier_constant :: proc(name: ^Token) -> u8 {
-	return make_constant(allocate_string(name.text))
+	return make_constant(copy_string(name.text))
 }
 
 declare_variable :: proc() {
@@ -593,6 +669,7 @@ define_variable :: proc(global: u8) {
 }
 
 mark_initialized :: proc() {
+	if current.scope_depth == 0 do return
 	current.locals[current.local_count - 1].depth = current.scope_depth
 }
 
@@ -624,7 +701,7 @@ non_consume :: proc(type: TokenType, message: string) {
 }
 
 current_chunk :: proc() -> ^Chunk {
-	return compiling_chunk
+	return &current.procedure.chunk
 }
 
 emit_constant :: proc(value: Value) {
@@ -640,13 +717,21 @@ emit_bytes :: proc(byte1, byte2: u8) {
 	emit_byte(byte2)
 }
 
-end_compiler :: proc() {
+end_compiler :: proc() -> ^ObjProcedure {
 	emit_return()
+	procedure := current.procedure
 	when DEBUG_PRINT_CODE {
 		if !parser.had_error {
-			print_chunk(current_chunk(), "code")
+			chunk_name: string = "<script>"
+			if procedure.name != nil {
+				chunk_name = procedure.name.str
+			}
+			print_chunk(current_chunk(), chunk_name)
 		}
 	}
+
+	current = current.enclosing
+	return procedure
 }
 
 emit_return :: proc() {

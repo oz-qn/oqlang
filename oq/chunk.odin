@@ -94,9 +94,6 @@ add_constant :: proc(chunk: ^Chunk, value: Value) -> int {
 	return len(&chunk.constants) - 1
 }
 
-read_constant :: #force_inline proc "contextless" () -> Value {
-	return vm.chunk.constants[read_byte()]
-}
 
 disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 	fmt.printf("%0*d ", 4, index)
@@ -157,6 +154,8 @@ disassemble_instruction :: proc(chunk: ^Chunk, index: int) -> int {
 		return jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, index)
 	case Op.LOOP:
 		return jump_instruction("OP_LOOP", -1, chunk, index)
+	case Op.CALL:
+		return byte_instruction("OP_CALL", chunk, index)
 	}
 
 	fmt.printf("unknown opcode {}\n", Op(instruction))

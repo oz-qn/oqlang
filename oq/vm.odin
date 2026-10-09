@@ -9,13 +9,22 @@ import "core:strings"
 DEBUG :: false
 DEBUG_PRINT_CODE :: false
 
+FRAMES_MAX :: 64
+
+
+CallFrame :: struct {
+	procedure: ^ObjProcedure,
+	ip:        int,
+	slots:     []Value,
+}
+
 VM :: struct {
-	stack:   Stack,
-	globals: Table,
-	strings: Table,
-	objects: ^Obj,
-	chunk:   ^Chunk,
-	ip:      int,
+	frames:      [FRAMES_MAX]CallFrame,
+	frame_count: int,
+	stack:       Stack,
+	globals:     Table,
+	strings:     Table,
+	objects:     ^Obj,
 }
 
 vm: VM
@@ -33,25 +42,34 @@ free_vm :: proc() {
 	table_free(&vm.strings)
 }
 
-read_byte :: #force_inline proc "contextless" () -> u8 {
-	result := vm.chunk.code[vm.ip]
-	vm.ip += 1
+read_byte :: #force_inline proc "contextless" (frame: ^CallFrame) -> u8 {
+	result := frame.procedure.chunk.code[frame.ip]
+	frame.ip += 1
 	return result
 }
 
-read_u16 :: #force_inline proc "contextless" () -> u16 {
-	vm.ip += 2
-	return (u16(vm.chunk.code[vm.ip - 2]) << 8) | u16(vm.chunk.code[vm.ip - 1])
+read_u16 :: #force_inline proc "contextless" (frame: ^CallFrame) -> u16 {
+	frame.ip += 2
+	return(
+		(u16(frame.procedure.chunk.code[frame.ip - 2]) << 8) |
+		u16(frame.procedure.chunk.code[frame.ip - 1]) \
+	)
+}
+
+read_constant :: #force_inline proc "contextless" (frame: ^CallFrame) -> Value {
+	return frame.procedure.chunk.constants[read_byte(frame)]
 }
 
 run :: proc() -> InterpretResult {
+	frame := &vm.frames[vm.frame_count - 1]
+
 	for {
-		instruction: Op = Op(read_byte())
+		instruction: Op = Op(read_byte(frame))
 		#partial switch instruction {
 		case .RETURN:
 			return InterpretResult.OK
 		case .CONSTANT:
-			constant: Value = read_constant()
+			constant: Value = read_constant(frame)
 			push(constant)
 			break
 		case .NEGATE:
@@ -90,11 +108,11 @@ run :: proc() -> InterpretResult {
 		case .POP:
 			pop()
 		case .DEFINE_GLOBAL:
-			name := read_string()
+			name := read_string(frame)
 			table_insert(&vm.globals, name, peep_stack(0))
 			pop()
 		case .GET_GLOBAL:
-			name := read_string()
+			name := read_string(frame)
 			value, ok := table_get(&vm.globals, name)
 			if !ok {
 				runtime_error("Undefined variable '%s'.", name.str)
@@ -102,27 +120,33 @@ run :: proc() -> InterpretResult {
 			}
 			push(value)
 		case .SET_GLOBAL:
-			name := read_string()
+			name := read_string(frame)
 			if !table_set(&vm.globals, name, peep_stack(0)) {
 				table_remove(&vm.globals, name)
 				runtime_error("Undefined variable '%s'.", name.str)
 				return .RUNTIME_ERROR
 			}
 		case .GET_LOCAL:
-			slot := read_byte()
-			push(vm.stack.data[slot])
+			slot := read_byte(frame)
+			push(frame.slots[slot])
 		case .SET_LOCAL:
-			slot := read_byte()
-			vm.stack.data[slot] = peep_stack(0)
+			slot := read_byte(frame)
+			frame.slots[slot] = peep_stack(0)
 		case .JUMP_IF_FALSE:
-			offset := read_u16()
-			if is_falsey(peep_stack(0)) do vm.ip += int(offset)
+			offset := read_u16(frame)
+			if is_falsey(peep_stack(0)) do frame.ip += int(offset)
 		case .JUMP:
-			offset := read_u16()
-			vm.ip += int(offset)
+			offset := read_u16(frame)
+			frame.ip += int(offset)
 		case .LOOP:
-			offset := read_u16()
-			vm.ip -= int(offset)
+			offset := read_u16(frame)
+			frame.ip -= int(offset)
+		case .CALL:
+			arg_count := u16(read_byte(frame))
+			if !call_proc(peep_stack(arg_count), arg_count) {
+				return .RUNTIME_ERROR
+			}
+			frame = &vm.frames[vm.frame_count - 1]
 		}
 	}
 }
@@ -158,6 +182,36 @@ binary_op :: #force_inline proc "contextless" (instruction: Op) -> bool {
 	return true
 }
 
+call_proc :: proc(callee: Value, arg_count: u16) -> bool {
+	if is_obj(callee) {
+		#partial switch as_obj(callee).type {
+		case .Procedure:
+			return vm_call(as_procedure(callee), arg_count)
+		}
+	}
+	runtime_error("Can only call procedures.")
+	return false
+}
+
+vm_call :: proc(function: ^ObjProcedure, arg_count: u16) -> bool {
+	if arg_count != u16(function.arity) {
+		runtime_error("Expected %d arguments but got %d.", function.arity, arg_count)
+		return false
+	}
+
+	if vm.frame_count == FRAMES_MAX {
+		runtime_error("Stack overflow.")
+		return false
+	}
+
+	frame := &vm.frames[vm.frame_count]
+	vm.frame_count += 1
+	frame.procedure = function
+	frame.ip = 0
+	frame.slots = vm.stack.data[vm.stack.index - arg_count - 1:]
+	return true
+}
+
 concatenate :: proc() {
 	b := as_string(pop())
 	a := as_string(pop())
@@ -167,8 +221,18 @@ concatenate :: proc() {
 
 runtime_error :: proc(format: string, args: ..any) {
 	fmt.eprintfln(format, ..args)
-	line := get_line(vm.chunk, u32(vm.ip))
-	fmt.eprintfln("[line {}] in script", line)
+
+	for i := vm.frame_count - 1; i >= 0; i -= 1 {
+		frame := &vm.frames[i]
+		function := frame.procedure
+		instruction := len(function.chunk.code) - frame.ip - 1
+		if function.name == nil {
+			fmt.eprint("script\n")
+		} else {
+			fmt.eprintf("%v\n", function.name.str)
+		}
+	}
+
 	reset_stack()
 }
 
@@ -225,8 +289,8 @@ synchronize :: proc() {
 	}
 }
 
-read_string :: #force_inline proc "contextless" () -> ^ObjString {
-	return as_string(read_constant())
+read_string :: #force_inline proc "contextless" (frame: ^CallFrame) -> ^ObjString {
+	return as_string(read_constant(frame))
 }
 
 run_vm :: proc() {

@@ -4,12 +4,20 @@ import "core:fmt"
 import "core:strings"
 
 ObjType :: enum {
+	Procedure,
 	String,
 }
 
 Obj :: struct {
 	next: ^Obj,
 	type: ObjType,
+}
+
+ObjProcedure :: struct {
+	using obj: Obj,
+	chunk:     Chunk,
+	name:      ^ObjString,
+	arity:     int,
 }
 
 ObjString :: struct {
@@ -32,6 +40,10 @@ free_object :: proc(obj: ^Obj) {
 		str := cast(^ObjString)obj
 		delete(str.str)
 		free(obj)
+	case .Procedure:
+		function := cast(^ObjProcedure)obj
+		free_chunk(&function.chunk)
+		free(obj)
 	}
 }
 
@@ -43,7 +55,15 @@ allocate_object :: #force_inline proc($T: typeid, obj_type: ObjType) -> ^Obj {
 	return object
 }
 
-allocate_string :: #force_inline proc(str: string) -> ^ObjString {
+new_procedure :: proc() -> ^ObjProcedure {
+	procedure: ^ObjProcedure = allocate_object_type(ObjProcedure, .Procedure)
+	procedure.arity = 0
+	procedure.name = nil
+	chunk_init(&procedure.chunk)
+	return procedure
+}
+
+copy_string :: #force_inline proc(str: string) -> ^ObjString {
 	interned, ok := vm.strings[str]
 	if ok {
 		return as_string(interned)
@@ -57,6 +77,7 @@ allocate_string :: #force_inline proc(str: string) -> ^ObjString {
 take_string :: #force_inline proc(str: string) -> ^ObjString {
 	interned, ok := vm.strings[str]
 	if ok {
+		delete(str)
 		return as_string(interned)
 	}
 	strobj := allocate_object_type(ObjString, .String)
@@ -77,12 +98,24 @@ print_object :: #force_inline proc(obj: ^Obj) {
 	switch obj.type {
 	case .String:
 		fmt.printf(as_ostring(obj))
+	case .Procedure:
+		print_procedure(as_procedure(obj))
 	}
+}
+
+print_procedure :: proc(procedure: ^ObjProcedure) {
+	if procedure.name == nil {
+		fmt.printf("<script>")
+		return
+	}
+	fmt.printf("<proc %s>", procedure.name.str)
 }
 
 obj_equal :: #force_inline proc(a, b: ^Obj) -> bool {
 	switch a.type {
 	case .String:
+		return a == b
+	case .Procedure:
 		return a == b
 	}
 	return false
@@ -94,6 +127,14 @@ is_obj_type :: #force_inline proc "contextless" (obj: ^Obj, type: ObjType) -> bo
 
 is_obj_string :: #force_inline proc "contextless" (obj: ^Obj) -> bool {
 	return obj.type == .String
+}
+
+is_obj_procedure :: #force_inline proc "contextless" (obj: ^Obj) -> bool {
+	return obj.type == .Procedure
+}
+
+as_procedure :: #force_inline proc "contextless" (value: Value) -> ^ObjProcedure {
+	return cast(^ObjProcedure)as_obj(value)
 }
 
 as_string :: #force_inline proc "contextless" (value: Value) -> ^ObjString {

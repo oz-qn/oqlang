@@ -1,3 +1,6 @@
-for i := 0; i < 10000; i += 1 {
-	print(i)
+hello_world proc() {
+	value := "Hello, World!"
+	print(value)
 }
+
+hello_world()

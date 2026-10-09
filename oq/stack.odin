@@ -2,10 +2,9 @@ package OQ
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:fmt"
 import "core:mem"
 
-STACK_MAX :: 256
+STACK_MAX :: FRAMES_MAX * 256
 
 Stack :: struct {
 	data:  [STACK_MAX]Value,
@@ -41,4 +40,5 @@ peep_stack :: #force_inline proc "contextless" (distance: u16) -> Value {
 
 reset_stack :: #force_inline proc "contextless" () {
 	vm.stack.index = 1
+	vm.frame_count = 0
 }

@@ -30,5 +30,6 @@ Op :: distinct enum u8 {
 	LOOP,
 	JUMP,
 	JUMP_IF_FALSE,
+	CALL,
 	RETURN,
 }
