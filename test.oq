@@ -1,7 +1,7 @@
 test := proc() {
-	print("testing")
+	for i := 0; i < 100; i += 1 {
+		print(i)
+	}
 }
-
-my_value := 0;
 
 test()

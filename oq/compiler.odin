@@ -361,9 +361,8 @@ expression :: proc() {
 
 declaration :: proc() {
 	if token_decl() {
-		consume(.IDENTIFIER, "Should be impossible to hit this one.")
+		consume(.IDENTIFIER, "How are you hitting this.")
 		if token_check_next(.PROC) {
-			fmt.println("Declaring a function")
 			proc_declaration()
 		} else {
 			var_declaration()
@@ -429,6 +428,8 @@ for_statement :: proc() {
 	if token_match(.SEMICOLON) {
 
 	} else if token_decl() {
+		consume(.IDENTIFIER, "How are you hitting this.")
+
 		var_declaration()
 	} else {
 		expression_statement()
