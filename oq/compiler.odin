@@ -9,10 +9,12 @@ U16_MAX :: 65535
 ParseFn :: #type proc(can_assign: bool)
 
 Parser :: struct {
-	current:    Token,
-	previous:   Token,
-	had_error:  bool,
-	panic_mode: bool,
+	current:      Token,
+	previous:     Token,
+	next:         Token,
+	looked_ahead: bool,
+	had_error:    bool,
+	panic_mode:   bool,
 }
 
 Precedence :: enum {
@@ -55,12 +57,16 @@ rules := [TokenType]ParseRule {
 	.COMMA         = {nil, nil, .NONE},
 	.DOT           = {nil, nil, .NONE},
 	.MINUS         = {unary, binary, .TERM},
+	.MINUS_EQUALS  = {nil, nil, .NONE},
 	.PLUS          = {nil, binary, .TERM},
 	.PLUS_EQUALS   = {nil, nil, .NONE},
 	.PERCENT       = {nil, binary, .TERM},
 	.SEMICOLON     = {nil, nil, .NONE},
+	.NEWLINE       = {nil, nil, .NONE},
 	.SLASH         = {nil, binary, .FACTOR},
+	.SLASH_EQUALS  = {nil, nil, .NONE},
 	.STAR          = {nil, binary, .FACTOR},
+	.STAR_EQUALS   = {nil, nil, .NONE},
 	.CARET         = {nil, binary, .FACTOR},
 	.BANG          = {unary, nil, .NONE},
 	.BANG_EQUAL    = {nil, binary, .EQUALITY},
@@ -90,7 +96,7 @@ rules := [TokenType]ParseRule {
 	.VAR           = {nil, nil, .NONE},
 	.WHILE         = {nil, nil, .NONE},
 	.COLON         = {nil, nil, .NONE},
-	.COLONCOLON    = {nil, nil, .NONE},
+	.COLON_EQUALS  = {nil, nil, .NONE},
 	.ERROR         = {nil, nil, .NONE},
 	.EOF           = {nil, nil, .NONE},
 }
@@ -104,11 +110,29 @@ parser_advance :: proc() {
 	parser.previous = parser.current
 
 	for {
-		parser.current = scan_token()
+		if parser.looked_ahead {
+			parser.current = parser.next
+			parser.looked_ahead = false
+		} else {
+			parser.current = scan_token()
+		}
 		if parser.current.type != .ERROR do break
 
 		error_at_current(token_get_text(parser.current))
 	}
+}
+
+token_check_next :: proc(type: TokenType) -> bool {
+	if parser.looked_ahead {
+		return parser.next.type == type
+	}
+	parser.next = scan_token()
+	parser.looked_ahead = true
+	return parser.next.type == type
+}
+
+token_var_decl :: #force_inline proc() -> bool {
+	return token_check(.IDENTIFIER) && token_check_next(.COLON_EQUALS)
 }
 
 init_compiler :: proc(compiler: ^Compiler) {
@@ -174,7 +198,13 @@ named_variable :: proc(name: ^Token, can_assign: bool) {
 		set_op = u8(Op.SET_GLOBAL)
 	}
 
-	if type, ok := token_match_any(.EQUAL, .PLUS_EQUALS); can_assign && ok {
+	if type, ok := token_match_any(
+		.EQUAL,
+		.PLUS_EQUALS,
+		.MINUS_EQUALS,
+		.STAR_EQUALS,
+		.SLASH_EQUALS,
+	); can_assign && ok {
 		#partial switch type {
 		case .EQUAL:
 			expression()
@@ -183,6 +213,21 @@ named_variable :: proc(name: ^Token, can_assign: bool) {
 			emit_bytes(get_op, arg)
 			expression()
 			emit_byte(u8(Op.ADD))
+			emit_bytes(set_op, arg)
+		case .MINUS_EQUALS:
+			emit_bytes(get_op, arg)
+			expression()
+			emit_byte(u8(Op.SUB))
+			emit_bytes(set_op, arg)
+		case .STAR_EQUALS:
+			emit_bytes(get_op, arg)
+			expression()
+			emit_byte(u8(Op.MUL))
+			emit_bytes(set_op, arg)
+		case .SLASH_EQUALS:
+			emit_bytes(get_op, arg)
+			expression()
+			emit_byte(u8(Op.DIV))
 			emit_bytes(set_op, arg)
 		}
 	} else {
@@ -276,7 +321,7 @@ expression :: proc() {
 }
 
 declaration :: proc() {
-	if token_match(.VAR) {
+	if token_var_decl() {
 		var_declaration()
 	} else {
 		statement()
@@ -338,7 +383,7 @@ for_statement :: proc() {
 
 	if token_match(.SEMICOLON) {
 
-	} else if token_match(.VAR) {
+	} else if token_var_decl() {
 		var_declaration()
 	} else {
 		expression_statement()
@@ -408,7 +453,7 @@ patch_jump :: proc(offset: int) {
 
 expression_statement :: proc() {
 	expression()
-	consume(.SEMICOLON, "Expect ';' after expression.")
+	consume_either(.SEMICOLON, .NEWLINE, "Expect ';' after expression.")
 	emit_byte(u8(Op.POP))
 }
 
@@ -436,12 +481,12 @@ block :: proc() {
 var_declaration :: proc() {
 	global := parse_variable("Expect variable name.")
 
-	if token_match(.EQUAL) {
+	if token_match(.COLON_EQUALS) {
 		expression()
 	} else {
 		emit_byte(u8(Op.NIL))
 	}
-	consume(.SEMICOLON, "Expect ';' after variable declaration.")
+	consume_either(.SEMICOLON, .NEWLINE, "Expect ';' after variable declaration.")
 	define_variable(global)
 }
 
@@ -449,7 +494,7 @@ print_statement :: proc() {
 	consume(.LEFT_PAREN, "Missing '(' after function call.")
 	expression()
 	consume(.RIGHT_PAREN, "Missing ')' after function call.")
-	consume(.SEMICOLON, "Expect ';' after value.")
+	consume_either(.SEMICOLON, .NEWLINE, "Expect ';' after value.")
 	emit_byte(u8(Op.PRINT))
 }
 
@@ -557,6 +602,14 @@ rule_get :: proc(type: TokenType) -> ^ParseRule {
 
 consume :: proc(type: TokenType, message: string) {
 	if parser.current.type == type {
+		parser_advance()
+		return
+	}
+	error_at_current(message)
+}
+
+consume_either :: proc(type1, type2: TokenType, message: string) {
+	if parser.current.type == type1 || parser.current.type == type2 {
 		parser_advance()
 		return
 	}

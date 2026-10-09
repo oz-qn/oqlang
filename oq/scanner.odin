@@ -5,6 +5,7 @@ import "core:unicode/utf8"
 Scanner :: struct {
 	code:                 string,
 	start, current, line: int,
+	insert_semicolon:     bool,
 }
 
 scanner: Scanner
@@ -16,60 +17,77 @@ scanner_init :: proc(code: string) {
 	scanner.line = 1
 }
 
-scan_token :: proc() -> Token {
+scan_token :: proc() -> (token: Token) {
 	skip_whitespace()
 	scanner.start = scanner.current
 
-	if is_at_end() {
-		return token_make(.EOF)
-	}
-
-	c: rune = advance()
-	if is_alpha(c) do return token_identifier()
-	if is_digit(c) do return token_number()
+	c: rune = utf8.RUNE_EOF if is_at_end() else advance()
 
 	switch c {
+	case utf8.RUNE_EOF:
+		token = token_make(.SEMICOLON) if scanner.insert_semicolon else token_make(.EOF)
+		scanner.insert_semicolon = false
+	case '\n':
+		scanner.insert_semicolon = false
+		token = token_make(.NEWLINE)
 	case '(':
-		return token_make(.LEFT_PAREN)
+		token = token_make(.LEFT_PAREN)
 	case ')':
-		return token_make(.RIGHT_PAREN)
+		token = token_make(.RIGHT_PAREN)
 	case '{':
-		return token_make(.LEFT_BRACE)
+		token = token_make(.LEFT_BRACE)
 	case '}':
-		return token_make(.RIGHT_BRACE)
+		token = token_make(.RIGHT_BRACE)
 	case ';':
-		return token_make(.SEMICOLON)
+		token = token_make(.SEMICOLON)
 	case ',':
-		return token_make(.COMMA)
+		token = token_make(.COMMA)
 	case '.':
-		return token_make(.DOT)
+		token = token_make(.DOT)
 	case '-':
-		return token_make(.MINUS)
+		token = token_make(.MINUS_EQUALS if match('=') else .MINUS)
 	case '+':
-		return token_make(.PLUS_EQUALS if match('=') else .PLUS)
+		token = token_make(.PLUS_EQUALS if match('=') else .PLUS)
 	case '/':
-		return token_make(.SLASH)
+		token = token_make(.SLASH_EQUALS if match('=') else .SLASH)
 	case '*':
-		return token_make(.STAR)
+		token = token_make(.STAR_EQUALS if match('=') else .STAR)
 	case '!':
-		return token_make(.BANG_EQUAL if match('=') else .BANG)
+		token = token_make(.BANG_EQUAL if match('=') else .BANG)
 	case '=':
-		return token_make(.EQUAL_EQUAL if match('=') else .EQUAL)
+		token = token_make(.EQUAL_EQUAL if match('=') else .EQUAL)
 	case '<':
-		return token_make(.LESS_EQUAL if match('=') else .LESS)
+		token = token_make(.LESS_EQUAL if match('=') else .LESS)
 	case '>':
-		return token_make(.GREATER_EQUAL if match('=') else .GREATER)
+		token = token_make(.GREATER_EQUAL if match('=') else .GREATER)
 	case ':':
-		return token_make(.COLONCOLON if match(':') else .COLON)
+		token = token_make(.COLON_EQUALS if match('=') else .COLON)
 	case '%':
-		return token_make(.PERCENT)
+		token = token_make(.PERCENT)
 	case '^':
-		return token_make(.CARET)
+		token = token_make(.CARET)
 	case '"':
-		return token_string()
+		token = token_string()
+	case:
+		if is_alpha(c) {
+			token = token_identifier()
+			break
+		}
+		if is_digit(c) {
+			token = token_number()
+			break
+		}
+		token = token_error("Unexpected character.")
 	}
 
-	return token_error("Unexpected character.")
+	#partial switch token.type {
+	case .IDENTIFIER, .NUMBER, .STRING, .NIL, .CARET, .FALSE, .TRUE, .EOF, .RIGHT_PAREN:
+		scanner.insert_semicolon = true
+	case:
+		scanner.insert_semicolon = false
+	}
+
+	return
 }
 
 skip_whitespace :: proc() {
@@ -80,6 +98,9 @@ skip_whitespace :: proc() {
 			advance()
 			break
 		case '\n':
+			if scanner.insert_semicolon {
+				return
+			}
 			scanner.line += 1
 			advance()
 			break
