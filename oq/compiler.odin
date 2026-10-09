@@ -379,6 +379,8 @@ statement :: proc() {
 		print_statement()
 	} else if token_match(.IF) {
 		if_statement()
+	} else if token_match(.RETURN) {
+		return_statement()
 	} else if token_match(.WHILE) {
 		while_statement()
 	} else if token_match(.FOR) {
@@ -389,6 +391,20 @@ statement :: proc() {
 		end_scope()
 	} else {
 		expression_statement()
+	}
+}
+
+return_statement :: proc() {
+	if current.type == .SCRIPT {
+		error("Can't error from top-level code.")
+	}
+
+	if token_match(.SEMICOLON) || token_match(.NEWLINE) {
+		emit_return()
+	} else {
+		expression()
+		consume_either(.SEMICOLON, .NEWLINE, "Expect ';' after return value.")
+		emit_byte(u8(Op.RETURN))
 	}
 }
 
@@ -546,6 +562,7 @@ procedure :: proc(type: ProcedureType) {
 			if current.procedure.arity > 255 {
 				error_at_current("Can't have more than 255 parameters.")
 			}
+			consume(.IDENTIFIER, "I really should fix this issue")
 			constant := parse_variable("Expect parameter name.")
 			define_variable(constant)
 			if !token_match(.COMMA) do break
@@ -740,6 +757,7 @@ end_compiler :: proc() -> ^ObjProcedure {
 }
 
 emit_return :: proc() {
+	emit_byte(u8(Op.NIL))
 	emit_byte(u8(Op.RETURN))
 }
 

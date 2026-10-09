@@ -6,6 +6,7 @@ import "core:strings"
 ObjType :: enum {
 	Procedure,
 	String,
+	Native,
 }
 
 Obj :: struct {
@@ -18,6 +19,13 @@ ObjProcedure :: struct {
 	chunk:     Chunk,
 	name:      ^ObjString,
 	arity:     int,
+}
+
+NativeFn :: proc(arg_count: u8, args: []Value) -> Value
+
+ObjNative :: struct {
+	using obj: Obj,
+	procedure: NativeFn,
 }
 
 ObjString :: struct {
@@ -44,6 +52,8 @@ free_object :: proc(obj: ^Obj) {
 		function := cast(^ObjProcedure)obj
 		free_chunk(&function.chunk)
 		free(obj)
+	case .Native:
+		free(obj)
 	}
 }
 
@@ -61,6 +71,12 @@ new_procedure :: proc() -> ^ObjProcedure {
 	procedure.name = nil
 	chunk_init(&procedure.chunk)
 	return procedure
+}
+
+new_native :: proc(procedure: NativeFn) -> ^ObjNative {
+	native := allocate_object_type(ObjNative, .Native)
+	native.procedure = procedure
+	return native
 }
 
 copy_string :: #force_inline proc(str: string) -> ^ObjString {
@@ -100,6 +116,8 @@ print_object :: #force_inline proc(obj: ^Obj) {
 		fmt.printf(as_ostring(obj))
 	case .Procedure:
 		print_procedure(as_procedure(obj))
+	case .Native:
+		fmt.printf("<native fn>")
 	}
 }
 
@@ -117,6 +135,8 @@ obj_equal :: #force_inline proc(a, b: ^Obj) -> bool {
 		return a == b
 	case .Procedure:
 		return a == b
+	case .Native:
+		return a == b
 	}
 	return false
 }
@@ -133,8 +153,16 @@ is_obj_procedure :: #force_inline proc "contextless" (obj: ^Obj) -> bool {
 	return obj.type == .Procedure
 }
 
+is_obj_native :: #force_inline proc "contextless" (obj: ^Obj) -> bool {
+	return obj.type == .Native
+}
+
 as_procedure :: #force_inline proc "contextless" (value: Value) -> ^ObjProcedure {
 	return cast(^ObjProcedure)as_obj(value)
+}
+
+as_native :: #force_inline proc "contextless" (value: Value) -> NativeFn {
+	return (cast(^ObjNative)as_obj(value)).procedure
 }
 
 as_string :: #force_inline proc "contextless" (value: Value) -> ^ObjString {

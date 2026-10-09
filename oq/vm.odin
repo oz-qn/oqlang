@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:math"
 import "core:os"
 import "core:strings"
+import "core:time"
 
 DEBUG :: false
 DEBUG_PRINT_CODE :: false
@@ -34,6 +35,8 @@ init_vm :: proc() {
 	vm.objects = nil
 	table_init(&vm.globals)
 	table_init(&vm.strings)
+
+	define_native("clock", clock_native)
 }
 
 free_vm :: proc() {
@@ -67,7 +70,14 @@ run :: proc() -> InterpretResult {
 		instruction: Op = Op(read_byte(frame))
 		#partial switch instruction {
 		case .RETURN:
-			return InterpretResult.OK
+			result := pop()
+			vm.frame_count -= 1
+			if vm.frame_count == 0 {
+				return .OK
+			}
+			vm.stack.index -= u16(frame.procedure.arity) + 1
+			push(result)
+			frame = &vm.frames[vm.frame_count - 1]
 		case .CONSTANT:
 			constant: Value = read_constant(frame)
 			push(constant)
@@ -151,6 +161,10 @@ run :: proc() -> InterpretResult {
 	}
 }
 
+clock_native :: proc(arg_count: u8, args: []Value) -> Value {
+	return f64(time.now()._nsec) / 1000000000
+}
+
 binary_op :: #force_inline proc "contextless" (instruction: Op) -> bool {
 	if !is_number(peep_stack(0)) || !is_number(peep_stack(1)) {
 		return false
@@ -187,10 +201,24 @@ call_proc :: proc(callee: Value, arg_count: u16) -> bool {
 		#partial switch as_obj(callee).type {
 		case .Procedure:
 			return vm_call(as_procedure(callee), arg_count)
+		case .Native:
+			native := as_native(callee)
+			result := native(u8(arg_count), vm.stack.data[vm.stack.index - arg_count:])
+			vm.stack.index -= arg_count + 1
+			push(result)
+			return true
 		}
 	}
 	runtime_error("Can only call procedures.")
 	return false
+}
+
+define_native :: proc(name: string, procedure: NativeFn) {
+	push(as_obj(copy_string(name)))
+	push(as_obj(new_native(procedure)))
+	table_set(&vm.globals, as_string(vm.stack.data[0]), vm.stack.data[1])
+	pop()
+	pop()
 }
 
 vm_call :: proc(function: ^ObjProcedure, arg_count: u16) -> bool {

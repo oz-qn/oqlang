@@ -1,7 +1,5 @@
-test := proc() {
-	for i := 0; i < 100; i += 1 {
-		print(i)
-	}
+idk := proc(thing) {
+	print(thing)
 }
 
-test()
+idk(21)
