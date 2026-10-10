@@ -570,6 +570,9 @@ procedure :: proc(type: ProcedureType) {
 	}
 
 	consume(.RIGHT_PAREN, "Expect ')' after parameters.")
+	if token_match(.GREATER) {
+		consume(.IDENTIFIER, "Expected return type after '>'.")
+	}
 	consume(.LEFT_BRACE, "Expect '{' before procedure body.")
 	block()
 

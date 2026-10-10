@@ -1,5 +1,7 @@
-idk := proc(thing) {
-	print(thing)
+test := proc() {
+	print("Success!")
 }
 
-idk(21)
+if (1 == 1) or (2 == 2) {
+	test()
+}

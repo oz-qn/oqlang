@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 import "core:mem"
-import "oq"
+import oq "src"
 
 DEBUG :: false
 

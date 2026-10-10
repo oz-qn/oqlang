@@ -30,6 +30,18 @@ scan_token :: proc() -> (token: Token) {
 	case '\n':
 		scanner.insert_semicolon = false
 		token = token_make(.NEWLINE)
+	case '&':
+		if match('&') {
+			token = token_make(.AND)
+		} else {
+			token_error("Singular '&' doesn't do anything.")
+		}
+	case '|':
+		if match('|') {
+			token = token_make(.OR)
+		} else {
+			token_error("Singular '|' doesn't do anything.")
+		}
 	case '(':
 		token = token_make(.LEFT_PAREN)
 	case ')':
